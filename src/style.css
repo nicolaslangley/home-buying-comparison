@@ -341,7 +341,7 @@ body {
 .property-inputs {
   padding: 0.75rem;
   border-right: 1px solid var(--border-color);
-  flex: 0 0 220px;
+  flex: 0 0 230px;
 }
 
 .property-inputs-section-title {
