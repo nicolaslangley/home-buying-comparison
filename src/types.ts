@@ -11,6 +11,8 @@ export interface GlobalSettings {
 
 // 401k contributions are pre-tax deductions that reduce federal taxable income
 export interface WAIncome {
+  partner1Name: string;
+  partner2Name: string;
   salary1: number;
   salary2: number;
   contribution401k1: number;
@@ -23,6 +25,7 @@ export interface Property {
   id: string;
   name: string;
   listingUrl: string;
+  photoUrl: string;
   cost: number;
   downPayment: number | null;    // null = use settings.defaultDownPayment
   additionalFunds: number;       // extra funds toward down (gifts, etc.)
@@ -31,6 +34,7 @@ export interface Property {
   monthlyTaxes: number;
   monthlyInsurance: number;
   hoa: number;
+  maintenancePct: number | null; // null = 0.5% default
 }
 
 // Derived values from a Property + IncomeCalcs

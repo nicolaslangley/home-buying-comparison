@@ -122,6 +122,31 @@ body {
   align-items: start;
 }
 
+.partner-names {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.partner-name-input {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--text-color);
+  background: #fff;
+  padding: 0.375rem 0.6rem;
+  width: 100%;
+  transition: border-color 0.15s;
+}
+
+.partner-name-input:focus {
+  outline: none;
+  border-color: #999;
+}
+
 .income-inputs-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -248,6 +273,20 @@ body {
   overflow: hidden;
 }
 
+.property-photo {
+  width: 100%;
+  height: 180px;
+  overflow: hidden;
+  background: var(--bg-color);
+}
+
+.property-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .property-card-header {
   padding: 0.875rem 1.25rem;
   border-bottom: 1px solid var(--border-color);
@@ -300,6 +339,9 @@ body {
 }
 
 .url-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
   margin-bottom: 1rem;
 }
 

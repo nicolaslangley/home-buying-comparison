@@ -18,6 +18,8 @@ const settings: GlobalSettings = {
 };
 
 const income: WAIncome = {
+  partner1Name: 'Partner 1',
+  partner2Name: 'Partner 2',
   salary1: 0,
   salary2: 0,
   contribution401k1: 0,
@@ -34,6 +36,7 @@ function newProperty(): Property {
     id: String(nextId++),
     name: '',
     listingUrl: '',
+    photoUrl: '',
     cost: 0,
     downPayment: null,
     additionalFunds: 0,
@@ -42,6 +45,7 @@ function newProperty(): Property {
     monthlyTaxes: 0,
     monthlyInsurance: 0,
     hoa: 0,
+    maintenancePct: null,
   };
 }
 
@@ -63,21 +67,27 @@ function renderIncomeInputs() {
   return `
     <div class="income-card">
       <h3>Income &amp; Deductions</h3>
+      <div class="partner-names">
+        <input class="partner-name-input" type="text" data-income="partner1Name"
+          value="${income.partner1Name}" placeholder="Partner 1">
+        <input class="partner-name-input" type="text" data-income="partner2Name"
+          value="${income.partner2Name}" placeholder="Partner 2">
+      </div>
       <div class="income-inputs-grid">
         <div class="field">
-          <label>Partner 1 Gross Salary</label>
+          <label><span data-partner-name="1">${income.partner1Name}</span> Gross Salary</label>
           <input type="number" data-income="salary1" value="${income.salary1 || ''}" placeholder="0" min="0" step="1000">
         </div>
         <div class="field">
-          <label>Partner 2 Gross Salary</label>
+          <label><span data-partner-name="2">${income.partner2Name}</span> Gross Salary</label>
           <input type="number" data-income="salary2" value="${income.salary2 || ''}" placeholder="0" min="0" step="1000">
         </div>
         <div class="field">
-          <label>Partner 1 401k</label>
+          <label><span data-partner-name="1">${income.partner1Name}</span> 401k</label>
           <input type="number" data-income="contribution401k1" value="${income.contribution401k1 || ''}" placeholder="0" min="0" step="500">
         </div>
         <div class="field">
-          <label>Partner 2 401k</label>
+          <label><span data-partner-name="2">${income.partner2Name}</span> 401k</label>
           <input type="number" data-income="contribution401k2" value="${income.contribution401k2 || ''}" placeholder="0" min="0" step="500">
         </div>
       </div>
@@ -186,6 +196,7 @@ function renderIncomeResults(calcs: IncomeCalcs) {
 function renderPropertyCard(prop: Property) {
   return `
     <div class="property-card" data-id="${prop.id}">
+      ${prop.photoUrl ? `<div class="property-photo"><img src="${prop.photoUrl}" alt="Property photo" loading="lazy"></div>` : ''}
       <div class="property-card-header">
         <input class="property-name-input" type="text" placeholder="Property name / address"
           data-prop-field="name" value="${prop.name}">
@@ -196,6 +207,8 @@ function renderPropertyCard(prop: Property) {
         <div class="url-field">
           <input type="url" placeholder="Redfin / Zillow URL (optional)"
             data-prop-field="listingUrl" value="${prop.listingUrl}">
+          <input type="url" placeholder="Photo URL (optional)"
+            data-prop-field="photoUrl" value="${prop.photoUrl}">
         </div>
         <div class="property-inputs-grid">
           <div class="field">
@@ -214,6 +227,24 @@ function renderPropertyCard(prop: Property) {
             <label>HOA / mo</label>
             <input type="number" data-prop-field="hoa" value="${prop.hoa || ''}" placeholder="0" min="0" step="1">
           </div>
+          <div class="field">
+            <label>Annual Maintenance (%)</label>
+            <input type="number" data-prop-field="maintenancePct"
+              value="${prop.maintenancePct !== null ? (prop.maintenancePct * 100).toFixed(1) : ''}"
+              placeholder="0.5" min="0" max="10" step="0.1">
+          </div>
+          <div class="field">
+            <label>Down Payment</label>
+            <input type="number" data-prop-field="downPayment"
+              value="${prop.downPayment !== null ? prop.downPayment : ''}"
+              placeholder="${usd.format(settings.defaultDownPayment)}" min="0" step="1">
+          </div>
+          <div class="field">
+            <label>Interest Rate (%)</label>
+            <input type="number" data-prop-field="interestRate"
+              value="${prop.interestRate !== null ? (prop.interestRate * 100).toFixed(3) : ''}"
+              placeholder="${(settings.defaultInterestRate * 100).toFixed(3)}" min="0" max="20" step="0.125">
+          </div>
         </div>
       </div>
       <div class="property-results" id="results-${prop.id}">
@@ -229,11 +260,22 @@ function renderPropertyResults(prop: Property, calcs: PropertyCalcs) {
   const discClass = calcs.remainingDiscretionary >= 3000 ? 'badge-good'
     : calcs.remainingDiscretionary >= 1500 ? 'badge-warn' : 'badge-bad';
 
+  const fixedPct = calcs.pctOnFixed;
+  const fixedClass = fixedPct <= 0.75 ? 'badge-good' : fixedPct <= 0.80 ? 'badge-warn' : 'badge-bad';
+  const fixedLabel = fixedPct <= 0.75 ? 'You can do this'
+    : fixedPct <= 0.80 ? 'Proceed with caution'
+    : fixedPct <= 0.85 ? 'Go back and see where you can cut costs'
+    : 'Financial stress overload';
+
   const downPct = prop.cost > 0 ? calcs.totalDown / prop.cost : 0;
 
   return `
     <div class="result-group">
       <div class="result-group-title">Loan</div>
+      <div class="result-row">
+        <span class="result-label">Interest Rate</span>
+        <span class="result-value">${pct(prop.interestRate ?? settings.defaultInterestRate)}</span>
+      </div>
       <div class="result-row">
         <span class="result-label">Down Payment</span>
         <span class="result-value">
@@ -284,12 +326,15 @@ function renderPropertyResults(prop: Property, calcs: PropertyCalcs) {
     <div class="result-group">
       <div class="result-group-title">Full Budget</div>
       <div class="result-row">
-        <span class="result-label">Annual Maintenance (0.5%)</span>
+        <span class="result-label">Annual Maintenance (${pct(prop.maintenancePct ?? 0.005)})</span>
         <span class="result-value">${usd.format(calcs.annualMaintenance)}/yr</span>
       </div>
       <div class="result-row">
         <span class="result-label">% on Fixed Costs</span>
-        <span class="result-value">${pct(calcs.pctOnFixed)}</span>
+        <span class="result-value">
+          <span class="badge ${fixedClass}">${pct(fixedPct)}</span>
+          <span class="result-sub">${fixedLabel}</span>
+        </span>
       </div>
       <div class="result-row highlight">
         <span class="result-label">Remaining Discretionary</span>
@@ -324,6 +369,10 @@ function renderAddPropertyModal() {
               <label>Listing URL <span class="field-optional">(optional)</span></label>
               <input type="url" name="listingUrl" placeholder="Redfin or Zillow URL">
             </div>
+            <div class="field modal-field-wide">
+              <label>Photo URL <span class="field-optional">(optional — right-click listing photo → Copy image address)</span></label>
+              <input type="url" name="photoUrl" placeholder="https://…">
+            </div>
             <div class="field">
               <label>Purchase Price</label>
               <input type="number" name="cost" placeholder="0" min="0" step="1">
@@ -339,6 +388,10 @@ function renderAddPropertyModal() {
             <div class="field">
               <label>HOA / mo</label>
               <input type="number" name="hoa" placeholder="0" min="0" step="1">
+            </div>
+            <div class="field">
+              <label>Annual Maintenance (%)</label>
+              <input type="number" name="maintenancePct" placeholder="0.5" min="0" max="10" step="0.1">
             </div>
           </div>
           <div class="modal-section-title">Loan Details <span class="field-optional">— leave blank to use defaults</span></div>
@@ -491,11 +544,13 @@ function attachListeners() {
     const prop = newProperty();
     prop.name = v('name');
     prop.listingUrl = v('listingUrl');
+    prop.photoUrl = v('photoUrl');
     if (prop.listingUrl && !prop.name) prop.name = parseListingUrl(prop.listingUrl).address;
     prop.cost = n('cost') ?? 0;
     prop.monthlyTaxes = n('monthlyTaxes') ?? 0;
     prop.monthlyInsurance = n('monthlyInsurance') ?? 0;
     prop.hoa = n('hoa') ?? 0;
+    prop.maintenancePct = n('maintenancePct') !== null ? (n('maintenancePct')! / 100) : null;
     prop.downPayment = n('downPayment');
     prop.additionalFunds = n('additionalFunds') ?? 0;
     prop.interestRate = n('interestRate') !== null ? (n('interestRate')! / 100) : null;
@@ -528,9 +583,16 @@ function attachListeners() {
     // Income fields
     const incomeField = target.dataset.income as keyof WAIncome | undefined;
     if (incomeField) {
+      if (incomeField === 'partner1Name' || incomeField === 'partner2Name') {
+        income[incomeField] = target.value;
+        const n = incomeField === 'partner1Name' ? '1' : '2';
+        document.querySelectorAll(`[data-partner-name="${n}"]`).forEach(el => { el.textContent = target.value; });
+        saveState();
+        return;
+      }
       (income as unknown as Record<string, number>)[incomeField] = parseFloat(target.value) || 0;
       updateIncomeResults();
-      updateAllPropertyResults(); // expenses affect pctOnFixed / remainingDiscretionary
+      updateAllPropertyResults();
       saveState();
       return;
     }
@@ -543,7 +605,7 @@ function attachListeners() {
       const prop = properties.find(p => p.id === card.dataset.id!);
       if (!prop) return;
 
-      if (propField === 'name' || propField === 'listingUrl') {
+      if (propField === 'name' || propField === 'listingUrl' || propField === 'photoUrl') {
         (prop as unknown as Record<string, string>)[propField] = target.value;
         if (propField === 'listingUrl') {
           // Update listing link in header without re-rendering the whole card
@@ -569,6 +631,19 @@ function attachListeners() {
             link.remove();
           }
         }
+        if (propField === 'photoUrl') {
+          let photoEl = card.querySelector('.property-photo') as HTMLElement | null;
+          if (target.value) {
+            if (!photoEl) {
+              photoEl = document.createElement('div');
+              photoEl.className = 'property-photo';
+              card.insertBefore(photoEl, card.firstChild);
+            }
+            photoEl.innerHTML = `<img src="${target.value}" alt="Property photo" loading="lazy">`;
+          } else if (photoEl) {
+            photoEl.remove();
+          }
+        }
         saveState();
         return;
       }
@@ -588,6 +663,12 @@ function attachListeners() {
       }
       if (propField === 'durationMonths') {
         prop.durationMonths = target.value === '' ? null : parseFloat(target.value) || null;
+        updatePropertyResult(prop, calcWAIncome(income, settings));
+        saveState();
+        return;
+      }
+      if (propField === 'maintenancePct') {
+        prop.maintenancePct = target.value === '' ? null : parseFloat(target.value) / 100 || null;
         updatePropertyResult(prop, calcWAIncome(income, settings));
         saveState();
         return;

@@ -90,8 +90,7 @@ export function calcProperty(
 
   const remainingIncome = incomeCalcs.netMonthly - totalMonthly - effectiveSavings;
 
-  // 0.5% of purchase price annually is the standard rule-of-thumb for maintenance budgeting.
-  const annualMaintenance = prop.cost * 0.005;
+  const annualMaintenance = prop.cost * (prop.maintenancePct ?? 0.005);
 
   // pctOnFixed: share of net income committed to non-discretionary spending.
   const pctOnFixed =
