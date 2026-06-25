@@ -12,6 +12,9 @@ const settings: GlobalSettings = {
   targetHousingPct: 0.30,
   targetLeftoverSpending: 9000,
   includePrincipalInSavings: false,
+  defaultInterestRate: 0.065,
+  defaultDownPayment: 0,
+  defaultDurationMonths: 360,
 };
 
 const income: WAIncome = {
@@ -19,6 +22,8 @@ const income: WAIncome = {
   salary2: 0,
   contribution401k1: 0,
   contribution401k2: 0,
+  fixedMonthlyExpenses: 0,
+  childcareCosts: 0,
 };
 
 let properties: Property[] = [];
@@ -30,15 +35,13 @@ function newProperty(): Property {
     name: '',
     listingUrl: '',
     cost: 0,
-    downPayment1: 0,
-    downPayment2: 0,
-    interestRate: 0.065, // 6.5% default — reasonable mid-2024 30yr rate
-    durationMonths: 360,
+    downPayment: null,
+    additionalFunds: 0,
+    interestRate: null,
+    durationMonths: null,
     monthlyTaxes: 0,
     monthlyInsurance: 0,
     hoa: 0,
-    fixedMonthlyExpenses: 0,
-    childcareCosts: 0,
   };
 }
 
@@ -54,34 +57,7 @@ function badgeClass(n: number, warn: number, bad: number) {
   return 'badge-bad';
 }
 
-// --- Settings UI ---
-
-function renderSettings() {
-  return `
-    <div class="settings-grid">
-      <div class="settings-field">
-        <label>Savings target (% gross)</label>
-        <input type="number" id="s-savings-pct" value="${(settings.targetSavingsPct * 100).toFixed(0)}" min="0" max="100" step="1">
-      </div>
-      <div class="settings-field">
-        <label>Housing target (% gross)</label>
-        <input type="number" id="s-housing-pct" value="${(settings.targetHousingPct * 100).toFixed(0)}" min="0" max="100" step="1">
-      </div>
-      <div class="settings-field">
-        <label>Leftover spending target / mo</label>
-        <input type="number" id="s-leftover" value="${settings.targetLeftoverSpending}" min="0" step="500">
-      </div>
-      <div class="toggle-field">
-        <span class="toggle-label">Principal counts as savings</span>
-        <div class="toggle-row">
-          <input type="checkbox" id="s-principal" ${settings.includePrincipalInSavings ? 'checked' : ''}>
-          <label for="s-principal" style="font-size:0.875rem">Include principal</label>
-        </div>
-      </div>
-    </div>`;
-}
-
-// --- Income section ---
+// --- Finances section ---
 
 function renderIncomeInputs() {
   return `
@@ -103,6 +79,72 @@ function renderIncomeInputs() {
         <div class="field">
           <label>Partner 2 401k</label>
           <input type="number" data-income="contribution401k2" value="${income.contribution401k2 || ''}" placeholder="0" min="0" step="500">
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderLoanDefaults() {
+  return `
+    <div class="income-card">
+      <h3>Loan Details</h3>
+      <div class="income-inputs-grid">
+        <div class="field">
+          <label>Interest Rate (%)</label>
+          <input type="number" id="s-interest-rate" value="${(settings.defaultInterestRate * 100).toFixed(3)}" min="0" max="20" step="0.01">
+        </div>
+        <div class="field">
+          <label>Down Payment</label>
+          <input type="number" id="s-down-payment" value="${settings.defaultDownPayment || ''}" placeholder="0" min="0" step="1">
+        </div>
+        <div class="field">
+          <label>Loan Term (months)</label>
+          <input type="number" id="s-duration" value="${settings.defaultDurationMonths}" min="60" max="480" step="1">
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderMonthlyExpenses() {
+  return `
+    <div class="income-card">
+      <h3>Monthly Expenses</h3>
+      <div class="income-inputs-grid">
+        <div class="field">
+          <label>Fixed Monthly Expenses</label>
+          <input type="number" data-income="fixedMonthlyExpenses" value="${income.fixedMonthlyExpenses || ''}" placeholder="0" min="0" step="1">
+        </div>
+        <div class="field">
+          <label>Childcare / mo</label>
+          <input type="number" data-income="childcareCosts" value="${income.childcareCosts || ''}" placeholder="0" min="0" step="1">
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderTargets() {
+  return `
+    <div class="income-card">
+      <h3>Targets</h3>
+      <div class="settings-grid">
+        <div class="settings-field">
+          <label>Savings target (% gross)</label>
+          <input type="number" id="s-savings-pct" value="${(settings.targetSavingsPct * 100).toFixed(0)}" min="0" max="100" step="1">
+        </div>
+        <div class="settings-field">
+          <label>Housing target (% gross)</label>
+          <input type="number" id="s-housing-pct" value="${(settings.targetHousingPct * 100).toFixed(0)}" min="0" max="100" step="1">
+        </div>
+        <div class="settings-field">
+          <label>Leftover spending / mo</label>
+          <input type="number" id="s-leftover" value="${settings.targetLeftoverSpending}" min="0" step="1">
+        </div>
+        <div class="toggle-field">
+          <span class="toggle-label">Principal counts as savings</span>
+          <div class="toggle-row">
+            <input type="checkbox" id="s-principal" ${settings.includePrincipalInSavings ? 'checked' : ''}>
+            <label for="s-principal" style="font-size:0.875rem">Include principal</label>
+          </div>
         </div>
       </div>
     </div>`;
@@ -158,43 +200,19 @@ function renderPropertyCard(prop: Property) {
         <div class="property-inputs-grid">
           <div class="field">
             <label>Purchase Price</label>
-            <input type="number" data-prop-field="cost" value="${prop.cost || ''}" placeholder="0" min="0" step="10000">
-          </div>
-          <div class="field">
-            <label>Interest Rate (%)</label>
-            <input type="number" data-prop-field="interestRate" value="${(prop.interestRate * 100).toFixed(3)}" placeholder="6.5" min="0" max="20" step="0.125">
-          </div>
-          <div class="field">
-            <label>Partner 1 Down</label>
-            <input type="number" data-prop-field="downPayment1" value="${prop.downPayment1 || ''}" placeholder="0" min="0" step="5000">
-          </div>
-          <div class="field">
-            <label>Partner 2 Down</label>
-            <input type="number" data-prop-field="downPayment2" value="${prop.downPayment2 || ''}" placeholder="0" min="0" step="5000">
+            <input type="number" data-prop-field="cost" value="${prop.cost || ''}" placeholder="0" min="0" step="1">
           </div>
           <div class="field">
             <label>Monthly Taxes</label>
-            <input type="number" data-prop-field="monthlyTaxes" value="${prop.monthlyTaxes || ''}" placeholder="0" min="0" step="50">
+            <input type="number" data-prop-field="monthlyTaxes" value="${prop.monthlyTaxes || ''}" placeholder="0" min="0" step="1">
           </div>
           <div class="field">
             <label>Monthly Insurance</label>
-            <input type="number" data-prop-field="monthlyInsurance" value="${prop.monthlyInsurance || ''}" placeholder="0" min="0" step="10">
+            <input type="number" data-prop-field="monthlyInsurance" value="${prop.monthlyInsurance || ''}" placeholder="0" min="0" step="1">
           </div>
           <div class="field">
             <label>HOA / mo</label>
-            <input type="number" data-prop-field="hoa" value="${prop.hoa || ''}" placeholder="0" min="0" step="25">
-          </div>
-          <div class="field">
-            <label>Loan Term (months)</label>
-            <input type="number" data-prop-field="durationMonths" value="${prop.durationMonths}" placeholder="360" min="60" max="480" step="12">
-          </div>
-          <div class="field">
-            <label>Fixed Monthly Expenses</label>
-            <input type="number" data-prop-field="fixedMonthlyExpenses" value="${prop.fixedMonthlyExpenses || ''}" placeholder="0" min="0" step="100">
-          </div>
-          <div class="field">
-            <label>Childcare / mo</label>
-            <input type="number" data-prop-field="childcareCosts" value="${prop.childcareCosts || ''}" placeholder="0" min="0" step="100">
+            <input type="number" data-prop-field="hoa" value="${prop.hoa || ''}" placeholder="0" min="0" step="1">
           </div>
         </div>
       </div>
@@ -211,8 +229,7 @@ function renderPropertyResults(prop: Property, calcs: PropertyCalcs) {
   const discClass = calcs.remainingDiscretionary >= 3000 ? 'badge-good'
     : calcs.remainingDiscretionary >= 1500 ? 'badge-warn' : 'badge-bad';
 
-  const down = prop.downPayment1 + prop.downPayment2;
-  const downPct = prop.cost > 0 ? down / prop.cost : 0;
+  const downPct = prop.cost > 0 ? calcs.totalDown / prop.cost : 0;
 
   return `
     <div class="result-group">
@@ -220,7 +237,7 @@ function renderPropertyResults(prop: Property, calcs: PropertyCalcs) {
       <div class="result-row">
         <span class="result-label">Down Payment</span>
         <span class="result-value">
-          ${usd.format(down)}
+          ${usd.format(calcs.totalDown)}
           <span class="result-sub">${pct(downPct)} of price</span>
         </span>
       </div>
@@ -283,6 +300,75 @@ function renderPropertyResults(prop: Property, calcs: PropertyCalcs) {
     </div>`;
 }
 
+// --- Add Property modal ---
+
+function renderAddPropertyModal() {
+  const defaultRate = (settings.defaultInterestRate * 100).toFixed(3);
+  const defaultDuration = settings.defaultDurationMonths;
+
+  return `
+    <div class="modal-overlay" id="add-prop-modal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="modal-header">
+          <h2 id="modal-title">Add Property</h2>
+          <button class="modal-close" id="modal-close" aria-label="Close">×</button>
+        </div>
+        <form class="modal-form" id="add-prop-form">
+          <div class="modal-section-title">Property</div>
+          <div class="modal-grid">
+            <div class="field modal-field-wide">
+              <label>Name / Address</label>
+              <input type="text" name="name" placeholder="123 Main St" autocomplete="off">
+            </div>
+            <div class="field modal-field-wide">
+              <label>Listing URL <span class="field-optional">(optional)</span></label>
+              <input type="url" name="listingUrl" placeholder="Redfin or Zillow URL">
+            </div>
+            <div class="field">
+              <label>Purchase Price</label>
+              <input type="number" name="cost" placeholder="0" min="0" step="1">
+            </div>
+            <div class="field">
+              <label>Monthly Taxes</label>
+              <input type="number" name="monthlyTaxes" placeholder="0" min="0" step="1">
+            </div>
+            <div class="field">
+              <label>Monthly Insurance</label>
+              <input type="number" name="monthlyInsurance" placeholder="0" min="0" step="1">
+            </div>
+            <div class="field">
+              <label>HOA / mo</label>
+              <input type="number" name="hoa" placeholder="0" min="0" step="1">
+            </div>
+          </div>
+          <div class="modal-section-title">Loan Details <span class="field-optional">— leave blank to use defaults</span></div>
+          <div class="modal-grid">
+            <div class="field">
+              <label>Down Payment</label>
+              <input type="number" name="downPayment" placeholder="${usd.format(settings.defaultDownPayment)}" min="0" step="1">
+            </div>
+            <div class="field">
+              <label>Additional Funds</label>
+              <input type="number" name="additionalFunds" placeholder="0" min="0" step="1">
+            </div>
+            <div class="field">
+              <label>Interest Rate (%)</label>
+              <input type="number" name="interestRate" placeholder="${defaultRate}" min="0" max="20" step="0.01">
+            </div>
+            <div class="field">
+              <label>Loan Term (months)</label>
+              <input type="number" name="durationMonths" placeholder="${defaultDuration}" min="60" max="480" step="1">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" id="modal-cancel">Cancel</button>
+            <button type="submit" class="btn-primary">Add Property</button>
+          </div>
+        </form>
+      </div>
+    </div>`;
+}
+
 // --- Render ---
 
 function getApp() {
@@ -305,15 +391,14 @@ function render() {
 
     <main>
       <div class="container">
-        <section class="settings-section">
-          <h2 class="section-title">Settings</h2>
-          ${renderSettings()}
-        </section>
-        <section class="income-section">
-          <h2 class="section-title">Income</h2>
+        <section class="finances-section">
+          <h2 class="section-title">Finances</h2>
           <div class="income-layout">
             ${renderIncomeInputs()}
+            ${renderTargets()}
             ${renderIncomeResults(incomeCalcs)}
+            ${renderLoanDefaults()}
+            ${renderMonthlyExpenses()}
           </div>
         </section>
         <section class="properties-section">
@@ -326,7 +411,8 @@ function render() {
           </div>
         </section>
       </div>
-    </main>`;
+    </main>
+    ${renderAddPropertyModal()}`;
 
   updateAllPropertyResults();
   attachListeners();
@@ -344,7 +430,9 @@ function updateAllPropertyResults() {
 function updatePropertyResult(prop: Property, incomeCalcs: IncomeCalcs) {
   const el = document.getElementById(`results-${prop.id}`);
   if (!el) return;
-  if (!prop.cost || !prop.interestRate || !prop.durationMonths) {
+  const effectiveRate = prop.interestRate ?? settings.defaultInterestRate;
+  const effectiveDuration = prop.durationMonths ?? settings.defaultDurationMonths;
+  if (!prop.cost || !effectiveRate || !effectiveDuration) {
     el.innerHTML = `<p style="color:var(--text-secondary);font-size:0.875rem">Enter property details above to see calculations.</p>`;
     return;
   }
@@ -366,36 +454,84 @@ function updateIncomeResults() {
 function attachListeners() {
   const app = getApp();
 
-  app.addEventListener('click', (e) => {
-    if ((e.target as HTMLElement).id === 'add-prop') {
-      properties.push(newProperty());
-      render();
-      return;
-    }
+  const modal = document.getElementById('add-prop-modal')!;
 
-    const removeBtn = (e.target as HTMLElement).closest('[data-remove-id]') as HTMLElement | null;
+  function openModal() {
+    modal.classList.add('is-open');
+    (modal.querySelector('input[name="name"]') as HTMLInputElement)?.focus();
+  }
+
+  function closeModal() {
+    modal.classList.remove('is-open');
+    (document.getElementById('add-prop-form') as HTMLFormElement).reset();
+  }
+
+  app.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+
+    if (target.id === 'add-prop') { openModal(); return; }
+    if (target.id === 'modal-close' || target.id === 'modal-cancel') { closeModal(); return; }
+    if (target === modal) { closeModal(); return; } // backdrop click
+
+    const removeBtn = target.closest('[data-remove-id]') as HTMLElement | null;
     if (removeBtn) {
       const id = removeBtn.dataset.removeId!;
       properties = properties.filter(p => p.id !== id);
+      saveState();
       render();
     }
+  });
+
+  document.getElementById('add-prop-form')!.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const form = e.target as HTMLFormElement;
+    const v = (name: string) => (form.elements.namedItem(name) as HTMLInputElement).value.trim();
+    const n = (name: string) => { const s = v(name); return s === '' ? null : parseFloat(s); };
+
+    const prop = newProperty();
+    prop.name = v('name');
+    prop.listingUrl = v('listingUrl');
+    if (prop.listingUrl && !prop.name) prop.name = parseListingUrl(prop.listingUrl).address;
+    prop.cost = n('cost') ?? 0;
+    prop.monthlyTaxes = n('monthlyTaxes') ?? 0;
+    prop.monthlyInsurance = n('monthlyInsurance') ?? 0;
+    prop.hoa = n('hoa') ?? 0;
+    prop.downPayment = n('downPayment');
+    prop.additionalFunds = n('additionalFunds') ?? 0;
+    prop.interestRate = n('interestRate') !== null ? (n('interestRate')! / 100) : null;
+    prop.durationMonths = n('durationMonths');
+
+    properties.push(prop);
+    saveState();
+    closeModal();
+    render();
+  });
+
+  app.addEventListener('keydown', (e) => {
+    if ((e as KeyboardEvent).key === 'Escape' && modal.classList.contains('is-open')) closeModal();
   });
 
   app.addEventListener('input', (e) => {
     const target = e.target as HTMLInputElement;
 
-    // Global settings
-    if (target.id === 's-savings-pct') { settings.targetSavingsPct = parseFloat(target.value) / 100 || 0.25; updateIncomeResults(); updateAllPropertyResults(); return; }
-    if (target.id === 's-housing-pct') { settings.targetHousingPct = parseFloat(target.value) / 100 || 0.30; updateAllPropertyResults(); return; }
-    if (target.id === 's-leftover') { settings.targetLeftoverSpending = parseFloat(target.value) || 9000; updateAllPropertyResults(); return; }
-    if (target.id === 's-principal') { settings.includePrincipalInSavings = target.checked; updateAllPropertyResults(); return; }
+    // Global settings — targets
+    if (target.id === 's-savings-pct') { settings.targetSavingsPct = parseFloat(target.value) / 100 || 0.25; updateIncomeResults(); updateAllPropertyResults(); saveState(); return; }
+    if (target.id === 's-housing-pct') { settings.targetHousingPct = parseFloat(target.value) / 100 || 0.30; updateAllPropertyResults(); saveState(); return; }
+    if (target.id === 's-leftover') { settings.targetLeftoverSpending = parseFloat(target.value) || 9000; updateAllPropertyResults(); saveState(); return; }
+    if (target.id === 's-principal') { settings.includePrincipalInSavings = target.checked; updateAllPropertyResults(); saveState(); return; }
+
+    // Global settings — loan defaults
+    if (target.id === 's-interest-rate') { settings.defaultInterestRate = parseFloat(target.value) / 100 || 0.065; updateAllPropertyResults(); saveState(); return; }
+    if (target.id === 's-down-payment') { settings.defaultDownPayment = parseFloat(target.value) || 0; updateAllPropertyResults(); saveState(); return; }
+    if (target.id === 's-duration') { settings.defaultDurationMonths = parseFloat(target.value) || 360; updateAllPropertyResults(); saveState(); return; }
 
     // Income fields
     const incomeField = target.dataset.income as keyof WAIncome | undefined;
     if (incomeField) {
       (income as unknown as Record<string, number>)[incomeField] = parseFloat(target.value) || 0;
       updateIncomeResults();
-      updateAllPropertyResults();
+      updateAllPropertyResults(); // expenses affect pctOnFixed / remainingDiscretionary
+      saveState();
       return;
     }
 
@@ -433,13 +569,33 @@ function attachListeners() {
             link.remove();
           }
         }
+        saveState();
         return;
       }
 
-      let val = parseFloat(target.value) || 0;
-      if (propField === 'interestRate') val = val / 100; // UI shows %, state stores decimal
-      (prop as unknown as Record<string, number>)[propField] = val;
+      // Nullable loan detail overrides: empty field → revert to global default
+      if (propField === 'interestRate') {
+        prop.interestRate = target.value === '' ? null : parseFloat(target.value) / 100 || null;
+        updatePropertyResult(prop, calcWAIncome(income, settings));
+        saveState();
+        return;
+      }
+      if (propField === 'downPayment') {
+        prop.downPayment = target.value === '' ? null : parseFloat(target.value) ?? null;
+        updatePropertyResult(prop, calcWAIncome(income, settings));
+        saveState();
+        return;
+      }
+      if (propField === 'durationMonths') {
+        prop.durationMonths = target.value === '' ? null : parseFloat(target.value) || null;
+        updatePropertyResult(prop, calcWAIncome(income, settings));
+        saveState();
+        return;
+      }
+
+      (prop as unknown as Record<string, number>)[propField] = parseFloat(target.value) || 0;
       updatePropertyResult(prop, calcWAIncome(income, settings));
+      saveState();
     }
   });
 }
@@ -465,4 +621,25 @@ function parseListingUrl(url: string): { address: string } {
   }
 }
 
+// --- Persistence ---
+
+const STORAGE_KEY = 'hbc-state';
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ income, settings, properties, nextId }));
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    if (s.income) Object.assign(income, s.income);
+    if (s.settings) Object.assign(settings, s.settings);
+    if (Array.isArray(s.properties)) properties = s.properties;
+    if (s.nextId) nextId = s.nextId;
+  } catch { /* ignore corrupt data */ }
+}
+
+loadState();
 render();

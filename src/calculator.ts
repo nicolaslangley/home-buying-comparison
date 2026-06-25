@@ -65,6 +65,8 @@ export function calcWAIncome(income: WAIncome, settings: GlobalSettings): Income
     netMonthly: netAnnual / 12,
     savingsTarget,
     monthlySavingsTarget: savingsTarget / 12,
+    fixedMonthlyExpenses: income.fixedMonthlyExpenses,
+    childcareCosts: income.childcareCosts,
   };
 }
 
@@ -73,10 +75,13 @@ export function calcProperty(
   incomeCalcs: IncomeCalcs,
   settings: GlobalSettings,
 ): PropertyCalcs {
-  const monthlyRate = prop.interestRate / 12;
-  const loanAmount = prop.cost - prop.downPayment1 - prop.downPayment2;
-  const monthlyPI = pmt(monthlyRate, prop.durationMonths, loanAmount);
-  const monthlyPrincipal = Math.abs(avgMonthlyPrincipal(prop.interestRate, prop.durationMonths, loanAmount));
+  const rate = prop.interestRate ?? settings.defaultInterestRate;
+  const duration = prop.durationMonths ?? settings.defaultDurationMonths;
+  const monthlyRate = rate / 12;
+  const totalDown = (prop.downPayment ?? settings.defaultDownPayment) + prop.additionalFunds;
+  const loanAmount = prop.cost - totalDown;
+  const monthlyPI = pmt(monthlyRate, duration, loanAmount);
+  const monthlyPrincipal = Math.abs(avgMonthlyPrincipal(rate, duration, loanAmount));
   const totalMonthly = monthlyPI + prop.monthlyTaxes + prop.monthlyInsurance + prop.hoa;
 
   // If principal counts as savings, reduce the required cash savings by the principal portion.
@@ -90,11 +95,12 @@ export function calcProperty(
 
   // pctOnFixed: share of net income committed to non-discretionary spending.
   const pctOnFixed =
-    (prop.fixedMonthlyExpenses + prop.childcareCosts + annualMaintenance / 12 + totalMonthly + incomeCalcs.monthlySavingsTarget) /
+    (incomeCalcs.fixedMonthlyExpenses + incomeCalcs.childcareCosts + annualMaintenance / 12 + totalMonthly + incomeCalcs.monthlySavingsTarget) /
     incomeCalcs.netMonthly;
   const remainingDiscretionary = incomeCalcs.netMonthly * (1 - pctOnFixed);
 
   return {
+    totalDown,
     loanAmount,
     monthlyPI,
     monthlyPrincipal,

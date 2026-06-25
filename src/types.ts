@@ -4,6 +4,9 @@ export interface GlobalSettings {
   targetHousingPct: number;        // fraction of gross, used for badge coloring
   targetLeftoverSpending: number;  // monthly after housing + savings
   includePrincipalInSavings: boolean; // when true, principal paydown counts toward savings target
+  defaultInterestRate: number;     // decimal, e.g. 0.065 = 6.5%
+  defaultDownPayment: number;      // combined down payment default
+  defaultDurationMonths: number;   // loan term default
 }
 
 // 401k contributions are pre-tax deductions that reduce federal taxable income
@@ -12,6 +15,8 @@ export interface WAIncome {
   salary2: number;
   contribution401k1: number;
   contribution401k2: number;
+  fixedMonthlyExpenses: number;  // non-housing fixed costs (subscriptions, utilities, etc.)
+  childcareCosts: number;
 }
 
 export interface Property {
@@ -19,19 +24,18 @@ export interface Property {
   name: string;
   listingUrl: string;
   cost: number;
-  downPayment1: number;
-  downPayment2: number;
-  interestRate: number;   // stored as decimal, e.g. 0.065 = 6.5%
-  durationMonths: number;
+  downPayment: number | null;    // null = use settings.defaultDownPayment
+  additionalFunds: number;       // extra funds toward down (gifts, etc.)
+  interestRate: number | null;   // null = use settings.defaultInterestRate
+  durationMonths: number | null; // null = use settings.defaultDurationMonths
   monthlyTaxes: number;
   monthlyInsurance: number;
   hoa: number;
-  fixedMonthlyExpenses: number; // non-housing fixed costs (subscriptions, utilities, etc.)
-  childcareCosts: number;
 }
 
 // Derived values from a Property + IncomeCalcs
 export interface PropertyCalcs {
+  totalDown: number;
   loanAmount: number;
   monthlyPI: number;        // principal + interest payment
   monthlyPrincipal: number; // average principal portion over first 60 months
@@ -54,4 +58,6 @@ export interface IncomeCalcs {
   netMonthly: number;
   savingsTarget: number;        // annual: gross * savingsPct - deductions
   monthlySavingsTarget: number;
+  fixedMonthlyExpenses: number;
+  childcareCosts: number;
 }
