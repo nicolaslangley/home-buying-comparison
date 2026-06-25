@@ -203,52 +203,55 @@ function renderPropertyCard(prop: Property) {
         ${prop.listingUrl ? `<a class="listing-link" href="${prop.listingUrl}" target="_blank" rel="noopener">View listing ↗</a>` : ''}
         <button class="btn-remove" data-remove-id="${prop.id}" title="Remove">×</button>
       </div>
-      <div class="property-inputs">
-        <div class="url-field">
-          <input type="url" placeholder="Redfin / Zillow URL (optional)"
-            data-prop-field="listingUrl" value="${prop.listingUrl}">
-          <input type="url" placeholder="Photo URL (optional)"
-            data-prop-field="photoUrl" value="${prop.photoUrl}">
+      <div class="property-card-body">
+        <div class="property-inputs">
+          <div class="property-inputs-section-title">Details</div>
+          <div class="property-inputs-grid">
+            <div class="field">
+              <label>Purchase Price</label>
+              <input type="number" data-prop-field="cost" value="${prop.cost || ''}" placeholder="0" min="0" step="1">
+            </div>
+            <div class="field">
+              <label>Down Payment</label>
+              <input type="number" data-prop-field="downPayment"
+                value="${prop.downPayment !== null ? prop.downPayment : ''}"
+                placeholder="${usd.format(settings.defaultDownPayment)}" min="0" step="1">
+            </div>
+            <div class="field">
+              <label>Interest Rate (%)</label>
+              <input type="number" data-prop-field="interestRate"
+                value="${prop.interestRate !== null ? (prop.interestRate * 100).toFixed(3) : ''}"
+                placeholder="${(settings.defaultInterestRate * 100).toFixed(3)}" min="0" max="20" step="0.125">
+            </div>
+            <div class="field">
+              <label>Monthly Taxes</label>
+              <input type="number" data-prop-field="monthlyTaxes" value="${prop.monthlyTaxes || ''}" placeholder="0" min="0" step="1">
+            </div>
+            <div class="field">
+              <label>Insurance / mo</label>
+              <input type="number" data-prop-field="monthlyInsurance" value="${prop.monthlyInsurance || ''}" placeholder="0" min="0" step="1">
+            </div>
+            <div class="field">
+              <label>HOA / mo</label>
+              <input type="number" data-prop-field="hoa" value="${prop.hoa || ''}" placeholder="0" min="0" step="1">
+            </div>
+            <div class="field">
+              <label>Maintenance (%)</label>
+              <input type="number" data-prop-field="maintenancePct"
+                value="${prop.maintenancePct !== null ? (prop.maintenancePct * 100).toFixed(1) : ''}"
+                placeholder="0.5" min="0" max="10" step="0.1">
+            </div>
+          </div>
+          <div class="url-field url-field--spaced">
+            <input type="url" placeholder="Listing URL"
+              data-prop-field="listingUrl" value="${prop.listingUrl}">
+            <input type="url" placeholder="Photo URL"
+              data-prop-field="photoUrl" value="${prop.photoUrl}">
+          </div>
         </div>
-        <div class="property-inputs-grid">
-          <div class="field">
-            <label>Purchase Price</label>
-            <input type="number" data-prop-field="cost" value="${prop.cost || ''}" placeholder="0" min="0" step="1">
-          </div>
-          <div class="field">
-            <label>Monthly Taxes</label>
-            <input type="number" data-prop-field="monthlyTaxes" value="${prop.monthlyTaxes || ''}" placeholder="0" min="0" step="1">
-          </div>
-          <div class="field">
-            <label>Monthly Insurance</label>
-            <input type="number" data-prop-field="monthlyInsurance" value="${prop.monthlyInsurance || ''}" placeholder="0" min="0" step="1">
-          </div>
-          <div class="field">
-            <label>HOA / mo</label>
-            <input type="number" data-prop-field="hoa" value="${prop.hoa || ''}" placeholder="0" min="0" step="1">
-          </div>
-          <div class="field">
-            <label>Annual Maintenance (%)</label>
-            <input type="number" data-prop-field="maintenancePct"
-              value="${prop.maintenancePct !== null ? (prop.maintenancePct * 100).toFixed(1) : ''}"
-              placeholder="0.5" min="0" max="10" step="0.1">
-          </div>
-          <div class="field">
-            <label>Down Payment</label>
-            <input type="number" data-prop-field="downPayment"
-              value="${prop.downPayment !== null ? prop.downPayment : ''}"
-              placeholder="${usd.format(settings.defaultDownPayment)}" min="0" step="1">
-          </div>
-          <div class="field">
-            <label>Interest Rate (%)</label>
-            <input type="number" data-prop-field="interestRate"
-              value="${prop.interestRate !== null ? (prop.interestRate * 100).toFixed(3) : ''}"
-              placeholder="${(settings.defaultInterestRate * 100).toFixed(3)}" min="0" max="20" step="0.125">
-          </div>
+        <div class="property-results" id="results-${prop.id}">
+          <p class="results-empty">Enter details to see calculations.</p>
         </div>
-      </div>
-      <div class="property-results" id="results-${prop.id}">
-        <p style="color:var(--text-secondary);font-size:0.875rem">Enter property details above to see calculations.</p>
       </div>
     </div>`;
 }
@@ -486,7 +489,7 @@ function updatePropertyResult(prop: Property, incomeCalcs: IncomeCalcs) {
   const effectiveRate = prop.interestRate ?? settings.defaultInterestRate;
   const effectiveDuration = prop.durationMonths ?? settings.defaultDurationMonths;
   if (!prop.cost || !effectiveRate || !effectiveDuration) {
-    el.innerHTML = `<p style="color:var(--text-secondary);font-size:0.875rem">Enter property details above to see calculations.</p>`;
+    el.innerHTML = `<p class="results-empty">Enter details to see calculations.</p>`;
     return;
   }
   el.innerHTML = renderPropertyResults(prop, calcProperty(prop, incomeCalcs, settings));
