@@ -3,9 +3,6 @@ import { calcWAIncome, calcProperty } from './calculator';
 import type { GlobalSettings, WAIncome, Property, IncomeCalcs, PropertyCalcs } from './types';
 
 // --- State ---
-// All mutable state lives here as plain objects. No framework — changes trigger
-// targeted DOM updates (income results, property result panels) or a full re-render
-// (add/remove property). Full re-renders are cheap because inputs are few.
 
 const settings: GlobalSettings = {
   targetSavingsPct: 0.25,
@@ -30,7 +27,10 @@ const income: WAIncome = {
 
 let properties: Property[] = [];
 let nextId = 1;
-let pendingSharedProperty: Property | null = null;
+
+// Collapse state — survives re-renders since it's module-level
+const collapsedCards = new Set<string>();
+const collapsedSections = new Set<string>();
 
 function newProperty(): Property {
   return {
@@ -55,7 +55,6 @@ function newProperty(): Property {
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
 
-// Returns CSS class for color-coded badges: good (≤warn), warn (warn..bad], bad (>bad).
 function badgeClass(n: number, warn: number, bad: number) {
   if (n <= warn) return 'badge-good';
   if (n <= bad) return 'badge-warn';
@@ -64,146 +63,150 @@ function badgeClass(n: number, warn: number, bad: number) {
 
 // --- Finances section ---
 
-function renderIncomeInputs() {
+// Wraps income card content with a collapsible header.
+function incomeCard(key: string, title: string, content: string, extraAttrs = '') {
+  const collapsed = collapsedSections.has(key);
   return `
-    <div class="income-card">
-      <h3>Income &amp; Deductions</h3>
-      <div class="partner-names">
-        <input class="partner-name-input" type="text" data-income="partner1Name"
-          value="${income.partner1Name}" placeholder="Partner 1">
-        <input class="partner-name-input" type="text" data-income="partner2Name"
-          value="${income.partner2Name}" placeholder="Partner 2">
+    <div class="income-card" data-income-card="${key}" ${extraAttrs}>
+      <div class="income-card-header">
+        <h3>${title}</h3>
+        <button class="btn-section-toggle" data-collapse-section="${key}">${collapsed ? '▸' : '▾'}</button>
       </div>
-      <div class="income-inputs-grid">
-        <div class="field">
-          <label><span data-partner-name="1">${income.partner1Name}</span> Gross Salary</label>
-          <input type="number" data-income="salary1" value="${income.salary1 || ''}" placeholder="0" min="0" step="1000">
-        </div>
-        <div class="field">
-          <label><span data-partner-name="2">${income.partner2Name}</span> Gross Salary</label>
-          <input type="number" data-income="salary2" value="${income.salary2 || ''}" placeholder="0" min="0" step="1000">
-        </div>
-        <div class="field">
-          <label><span data-partner-name="1">${income.partner1Name}</span> 401k</label>
-          <input type="number" data-income="contribution401k1" value="${income.contribution401k1 || ''}" placeholder="0" min="0" step="500">
-        </div>
-        <div class="field">
-          <label><span data-partner-name="2">${income.partner2Name}</span> 401k</label>
-          <input type="number" data-income="contribution401k2" value="${income.contribution401k2 || ''}" placeholder="0" min="0" step="500">
+      <div class="income-card-body${collapsed ? ' is-collapsed' : ''}">
+        ${content}
+      </div>
+    </div>`;
+}
+
+function renderIncomeInputsContent() {
+  return `
+    <div class="partner-names">
+      <input class="partner-name-input" type="text" data-income="partner1Name"
+        value="${income.partner1Name}" placeholder="Partner 1">
+      <input class="partner-name-input" type="text" data-income="partner2Name"
+        value="${income.partner2Name}" placeholder="Partner 2">
+    </div>
+    <div class="income-inputs-grid">
+      <div class="field">
+        <label><span data-partner-name="1">${income.partner1Name}</span> Gross Salary</label>
+        <input type="number" data-income="salary1" value="${income.salary1 || ''}" placeholder="0" min="0" step="1000">
+      </div>
+      <div class="field">
+        <label><span data-partner-name="2">${income.partner2Name}</span> Gross Salary</label>
+        <input type="number" data-income="salary2" value="${income.salary2 || ''}" placeholder="0" min="0" step="1000">
+      </div>
+      <div class="field">
+        <label><span data-partner-name="1">${income.partner1Name}</span> 401k</label>
+        <input type="number" data-income="contribution401k1" value="${income.contribution401k1 || ''}" placeholder="0" min="0" step="500">
+      </div>
+      <div class="field">
+        <label><span data-partner-name="2">${income.partner2Name}</span> 401k</label>
+        <input type="number" data-income="contribution401k2" value="${income.contribution401k2 || ''}" placeholder="0" min="0" step="500">
+      </div>
+    </div>`;
+}
+
+function renderLoanDefaultsContent() {
+  return `
+    <div class="income-inputs-grid">
+      <div class="field">
+        <label>Interest Rate (%)</label>
+        <input type="number" id="s-interest-rate" value="${(settings.defaultInterestRate * 100).toFixed(3)}" min="0" max="20" step="0.01">
+      </div>
+      <div class="field">
+        <label>Down Payment</label>
+        <input type="number" id="s-down-payment" value="${settings.defaultDownPayment || ''}" placeholder="0" min="0" step="1">
+      </div>
+      <div class="field">
+        <label>Loan Term (months)</label>
+        <input type="number" id="s-duration" value="${settings.defaultDurationMonths}" min="60" max="480" step="1">
+      </div>
+    </div>`;
+}
+
+function renderMonthlyExpensesContent() {
+  return `
+    <div class="income-inputs-grid">
+      <div class="field">
+        <label>Fixed Monthly Expenses</label>
+        <input type="number" data-income="fixedMonthlyExpenses" value="${income.fixedMonthlyExpenses || ''}" placeholder="0" min="0" step="1">
+      </div>
+      <div class="field">
+        <label>Childcare / mo</label>
+        <input type="number" data-income="childcareCosts" value="${income.childcareCosts || ''}" placeholder="0" min="0" step="1">
+      </div>
+    </div>`;
+}
+
+function renderTargetsContent() {
+  return `
+    <div class="settings-grid">
+      <div class="settings-field">
+        <label>Savings target (% gross)</label>
+        <input type="number" id="s-savings-pct" value="${(settings.targetSavingsPct * 100).toFixed(0)}" min="0" max="100" step="1">
+      </div>
+      <div class="settings-field">
+        <label>Housing target (% gross)</label>
+        <input type="number" id="s-housing-pct" value="${(settings.targetHousingPct * 100).toFixed(0)}" min="0" max="100" step="1">
+      </div>
+      <div class="settings-field">
+        <label>Leftover spending / mo</label>
+        <input type="number" id="s-leftover" value="${settings.targetLeftoverSpending}" min="0" step="1">
+      </div>
+      <div class="toggle-field">
+        <span class="toggle-label">Principal counts as savings</span>
+        <div class="toggle-row">
+          <input type="checkbox" id="s-principal" ${settings.includePrincipalInSavings ? 'checked' : ''}>
+          <label for="s-principal" style="font-size:0.875rem">Include principal</label>
         </div>
       </div>
     </div>`;
 }
 
-function renderLoanDefaults() {
+function renderIncomeResultsContent(calcs: IncomeCalcs) {
   return `
-    <div class="income-card">
-      <h3>Loan Details</h3>
-      <div class="income-inputs-grid">
-        <div class="field">
-          <label>Interest Rate (%)</label>
-          <input type="number" id="s-interest-rate" value="${(settings.defaultInterestRate * 100).toFixed(3)}" min="0" max="20" step="0.01">
-        </div>
-        <div class="field">
-          <label>Down Payment</label>
-          <input type="number" id="s-down-payment" value="${settings.defaultDownPayment || ''}" placeholder="0" min="0" step="1">
-        </div>
-        <div class="field">
-          <label>Loan Term (months)</label>
-          <input type="number" id="s-duration" value="${settings.defaultDurationMonths}" min="60" max="480" step="1">
-        </div>
-      </div>
-    </div>`;
-}
-
-function renderMonthlyExpenses() {
-  return `
-    <div class="income-card">
-      <h3>Monthly Expenses</h3>
-      <div class="income-inputs-grid">
-        <div class="field">
-          <label>Fixed Monthly Expenses</label>
-          <input type="number" data-income="fixedMonthlyExpenses" value="${income.fixedMonthlyExpenses || ''}" placeholder="0" min="0" step="1">
-        </div>
-        <div class="field">
-          <label>Childcare / mo</label>
-          <input type="number" data-income="childcareCosts" value="${income.childcareCosts || ''}" placeholder="0" min="0" step="1">
-        </div>
-      </div>
-    </div>`;
-}
-
-function renderTargets() {
-  return `
-    <div class="income-card">
-      <h3>Targets</h3>
-      <div class="settings-grid">
-        <div class="settings-field">
-          <label>Savings target (% gross)</label>
-          <input type="number" id="s-savings-pct" value="${(settings.targetSavingsPct * 100).toFixed(0)}" min="0" max="100" step="1">
-        </div>
-        <div class="settings-field">
-          <label>Housing target (% gross)</label>
-          <input type="number" id="s-housing-pct" value="${(settings.targetHousingPct * 100).toFixed(0)}" min="0" max="100" step="1">
-        </div>
-        <div class="settings-field">
-          <label>Leftover spending / mo</label>
-          <input type="number" id="s-leftover" value="${settings.targetLeftoverSpending}" min="0" step="1">
-        </div>
-        <div class="toggle-field">
-          <span class="toggle-label">Principal counts as savings</span>
-          <div class="toggle-row">
-            <input type="checkbox" id="s-principal" ${settings.includePrincipalInSavings ? 'checked' : ''}>
-            <label for="s-principal" style="font-size:0.875rem">Include principal</label>
-          </div>
-        </div>
-      </div>
-    </div>`;
-}
-
-function renderIncomeResults(calcs: IncomeCalcs) {
-  return `
-    <div class="income-card" id="income-results">
-      <h3>Calculated</h3>
-      <div class="result-row">
-        <span class="result-label">Household Gross</span>
-        <span class="result-value">${usd.format(calcs.grossHousehold)}</span>
-      </div>
-      <div class="result-row">
-        <span class="result-label">Total Pre-tax Deductions</span>
-        <span class="result-value">${usd.format(calcs.totalDeductions)}</span>
-      </div>
-      <div class="result-row">
-        <span class="result-label">Est. Taxes</span>
-        <span class="result-value">${usd.format(calcs.taxes)}</span>
-      </div>
-      <div class="result-row highlight">
-        <span class="result-label">Net Annual</span>
-        <span class="result-value">${usd.format(calcs.netAnnual)}</span>
-      </div>
-      <div class="result-row highlight">
-        <span class="result-label">Net Monthly</span>
-        <span class="result-value">${usd.format(calcs.netMonthly)}</span>
-      </div>
-      <div class="result-row">
-        <span class="result-label">Monthly Savings Target</span>
-        <span class="result-value">${usd.format(calcs.monthlySavingsTarget)}</span>
-      </div>
+    <div class="result-row">
+      <span class="result-label">Household Gross</span>
+      <span class="result-value">${usd.format(calcs.grossHousehold)}</span>
+    </div>
+    <div class="result-row">
+      <span class="result-label">Total Pre-tax Deductions</span>
+      <span class="result-value">${usd.format(calcs.totalDeductions)}</span>
+    </div>
+    <div class="result-row">
+      <span class="result-label">Est. Taxes</span>
+      <span class="result-value">${usd.format(calcs.taxes)}</span>
+    </div>
+    <div class="result-row highlight">
+      <span class="result-label">Net Annual</span>
+      <span class="result-value">${usd.format(calcs.netAnnual)}</span>
+    </div>
+    <div class="result-row highlight">
+      <span class="result-label">Net Monthly</span>
+      <span class="result-value">${usd.format(calcs.netMonthly)}</span>
+    </div>
+    <div class="result-row">
+      <span class="result-label">Monthly Savings Target</span>
+      <span class="result-value">${usd.format(calcs.monthlySavingsTarget)}</span>
     </div>`;
 }
 
 // --- Property card ---
 
 function renderPropertyCard(prop: Property) {
+  const collapsed = collapsedCards.has(prop.id);
   return `
-    <div class="property-card" data-id="${prop.id}">
+    <div class="property-card${collapsed ? ' is-collapsed' : ''}" data-id="${prop.id}">
       ${prop.photoUrl ? `<div class="property-photo"><img src="${prop.photoUrl}" alt="Property photo" loading="lazy"></div>` : ''}
       <div class="property-card-header">
         <input class="property-name-input" type="text" placeholder="Property name / address"
           data-prop-field="name" value="${prop.name}">
-        ${prop.listingUrl ? `<a class="listing-link" href="${prop.listingUrl}" target="_blank" rel="noopener">View listing ↗</a>` : ''}
-        <button class="btn-share" data-share-id="${prop.id}" title="Copy share link">Share</button>
-        <button class="btn-remove" data-remove-id="${prop.id}" title="Remove">×</button>
+        <div class="property-card-actions">
+          ${prop.listingUrl ? `<a class="listing-link" href="${prop.listingUrl}" target="_blank" rel="noopener">View listing ↗</a>` : ''}
+          <button class="btn-share" data-share-id="${prop.id}" title="Copy share link">Share</button>
+          <button class="btn-section-toggle" data-collapse-id="${prop.id}" title="Toggle details">${collapsed ? '▸' : '▾'}</button>
+          <button class="btn-remove" data-remove-id="${prop.id}" title="Remove">×</button>
+        </div>
       </div>
       <div class="property-card-body">
         <div class="property-inputs">
@@ -433,14 +436,11 @@ function getApp() {
   return document.getElementById('app')!;
 }
 
-// Full re-render: replaces all DOM. Used for structural changes (add/remove property).
-// After replacing innerHTML, updateAllPropertyResults() fills in the result panels,
-// then attachListeners() wires delegated click/input handlers to the new DOM root.
 function render() {
   const incomeCalcs = calcWAIncome(income, settings);
+  const financesCollapsed = collapsedSections.has('finances');
 
   getApp().innerHTML = `
-    ${pendingSharedProperty ? renderShareBanner(pendingSharedProperty) : ''}
     <header class="site-header">
       <div class="container">
         <h1>Home Buying Calculator</h1>
@@ -451,13 +451,16 @@ function render() {
     <main>
       <div class="container">
         <section class="finances-section">
-          <h2 class="section-title">Finances</h2>
-          <div class="income-layout">
-            ${renderIncomeInputs()}
-            ${renderTargets()}
-            ${renderIncomeResults(incomeCalcs)}
-            ${renderLoanDefaults()}
-            ${renderMonthlyExpenses()}
+          <div class="section-header">
+            <h2 class="section-title">Finances</h2>
+            <button class="btn-section-toggle btn-section-toggle--lg" data-collapse-section="finances">${financesCollapsed ? '▸' : '▾'}</button>
+          </div>
+          <div class="income-layout${financesCollapsed ? ' is-collapsed' : ''}">
+            ${incomeCard('income', 'Income &amp; Deductions', renderIncomeInputsContent())}
+            ${incomeCard('targets', 'Targets', renderTargetsContent())}
+            ${incomeCard('calculated', 'Calculated', renderIncomeResultsContent(incomeCalcs), 'id="income-results-card"')}
+            ${incomeCard('loan', 'Loan Details', renderLoanDefaultsContent())}
+            ${incomeCard('expenses', 'Monthly Expenses', renderMonthlyExpensesContent())}
           </div>
         </section>
         <section class="properties-section">
@@ -484,8 +487,6 @@ function updateAllPropertyResults() {
   }
 }
 
-// Partially updates a single property's result panel without touching its input fields.
-// Skips calculation if required fields are missing to avoid divide-by-zero noise.
 function updatePropertyResult(prop: Property, incomeCalcs: IncomeCalcs) {
   const el = document.getElementById(`results-${prop.id}`);
   if (!el) return;
@@ -498,21 +499,19 @@ function updatePropertyResult(prop: Property, incomeCalcs: IncomeCalcs) {
   el.innerHTML = renderPropertyResults(prop, calcProperty(prop, incomeCalcs, settings));
 }
 
-// Swaps only the "Calculated" income card in-place rather than calling render().
-// A full re-render would reset scroll position.
+// Updates only the Calculated card body without a full re-render.
 function updateIncomeResults() {
   const incomeCalcs = calcWAIncome(income, settings);
-  const el = document.getElementById('income-results');
-  if (el) el.outerHTML = renderIncomeResults(incomeCalcs);
+  const card = document.getElementById('income-results-card');
+  if (!card) return;
+  const body = card.querySelector('.income-card-body');
+  if (body) body.innerHTML = renderIncomeResultsContent(incomeCalcs);
 }
 
 // --- Event handling (delegated) ---
-// All click and input events bubble up to #app, avoiding per-element listener management.
-// data-* attributes on inputs identify which state field to update.
 
 function attachListeners() {
   const app = getApp();
-
   const modal = document.getElementById('add-prop-modal')!;
 
   function openModal() {
@@ -530,26 +529,39 @@ function attachListeners() {
 
     if (target.id === 'add-prop') { openModal(); return; }
     if (target.id === 'modal-close' || target.id === 'modal-cancel') { closeModal(); return; }
-    if (target === modal) { closeModal(); return; } // backdrop click
+    if (target === modal) { closeModal(); return; }
 
-    if (target.id === 'share-add') {
-      if (pendingSharedProperty) {
-        properties.push(pendingSharedProperty);
-        pendingSharedProperty = null;
-        saveState();
-        render();
+    // Collapse property card
+    const collapseCardBtn = target.closest('[data-collapse-id]') as HTMLElement | null;
+    if (collapseCardBtn) {
+      const id = collapseCardBtn.dataset.collapseId!;
+      if (collapsedCards.has(id)) collapsedCards.delete(id); else collapsedCards.add(id);
+      const card = document.querySelector(`[data-id="${id}"]`) as HTMLElement | null;
+      if (card) card.classList.toggle('is-collapsed', collapsedCards.has(id));
+      collapseCardBtn.textContent = collapsedCards.has(id) ? '▸' : '▾';
+      return;
+    }
+
+    // Collapse finances section or income sub-card
+    const collapseSectionBtn = target.closest('[data-collapse-section]') as HTMLElement | null;
+    if (collapseSectionBtn) {
+      const key = collapseSectionBtn.dataset.collapseSection!;
+      if (collapsedSections.has(key)) collapsedSections.delete(key); else collapsedSections.add(key);
+      const isNowCollapsed = collapsedSections.has(key);
+      collapseSectionBtn.textContent = isNowCollapsed ? '▸' : '▾';
+      if (key === 'finances') {
+        document.querySelector('.income-layout')?.classList.toggle('is-collapsed', isNowCollapsed);
+      } else {
+        const card = document.querySelector(`[data-income-card="${key}"] .income-card-body`);
+        card?.classList.toggle('is-collapsed', isNowCollapsed);
       }
       return;
     }
-    if (target.id === 'share-dismiss') {
-      pendingSharedProperty = null;
-      document.getElementById('share-banner')?.remove();
-      return;
-    }
 
+    // Share button
     const shareBtn = target.closest('[data-share-id]') as HTMLElement | null;
     if (shareBtn) {
-      const id = (shareBtn as HTMLElement).dataset.shareId!;
+      const id = shareBtn.dataset.shareId!;
       const prop = properties.find(p => p.id === id);
       if (!prop) return;
       navigator.clipboard.writeText(buildShareUrl(prop)).then(() => {
@@ -559,10 +571,12 @@ function attachListeners() {
       return;
     }
 
+    // Remove property card
     const removeBtn = target.closest('[data-remove-id]') as HTMLElement | null;
     if (removeBtn) {
       const id = removeBtn.dataset.removeId!;
       properties = properties.filter(p => p.id !== id);
+      collapsedCards.delete(id);
       saveState();
       render();
     }
@@ -602,18 +616,14 @@ function attachListeners() {
   app.addEventListener('input', (e) => {
     const target = e.target as HTMLInputElement;
 
-    // Global settings — targets
     if (target.id === 's-savings-pct') { settings.targetSavingsPct = parseFloat(target.value) / 100 || 0.25; updateIncomeResults(); updateAllPropertyResults(); saveState(); return; }
     if (target.id === 's-housing-pct') { settings.targetHousingPct = parseFloat(target.value) / 100 || 0.30; updateAllPropertyResults(); saveState(); return; }
     if (target.id === 's-leftover') { settings.targetLeftoverSpending = parseFloat(target.value) || 9000; updateAllPropertyResults(); saveState(); return; }
     if (target.id === 's-principal') { settings.includePrincipalInSavings = target.checked; updateAllPropertyResults(); saveState(); return; }
-
-    // Global settings — loan defaults
     if (target.id === 's-interest-rate') { settings.defaultInterestRate = parseFloat(target.value) / 100 || 0.065; updateAllPropertyResults(); saveState(); return; }
     if (target.id === 's-down-payment') { settings.defaultDownPayment = parseFloat(target.value) || 0; updateAllPropertyResults(); saveState(); return; }
     if (target.id === 's-duration') { settings.defaultDurationMonths = parseFloat(target.value) || 360; updateAllPropertyResults(); saveState(); return; }
 
-    // Income fields
     const incomeField = target.dataset.income as keyof WAIncome | undefined;
     if (incomeField) {
       if (incomeField === 'partner1Name' || incomeField === 'partner2Name') {
@@ -630,7 +640,6 @@ function attachListeners() {
       return;
     }
 
-    // Property fields
     const propField = target.dataset.propField as keyof Property | undefined;
     if (propField) {
       const card = target.closest('[data-id]') as HTMLElement | null;
@@ -641,9 +650,8 @@ function attachListeners() {
       if (propField === 'name' || propField === 'listingUrl' || propField === 'photoUrl') {
         (prop as unknown as Record<string, string>)[propField] = target.value;
         if (propField === 'listingUrl') {
-          // Update listing link in header without re-rendering the whole card
-          const header = card.querySelector('.property-card-header')!;
-          let link = header.querySelector('.listing-link') as HTMLAnchorElement | null;
+          const actions = card.querySelector('.property-card-actions')!;
+          let link = actions.querySelector('.listing-link') as HTMLAnchorElement | null;
           if (target.value) {
             const parsed = parseListingUrl(target.value);
             if (!link) {
@@ -651,7 +659,7 @@ function attachListeners() {
               link.className = 'listing-link';
               link.target = '_blank';
               link.rel = 'noopener';
-              header.insertBefore(link, header.querySelector('.btn-remove'));
+              actions.insertBefore(link, actions.firstChild);
             }
             link.href = target.value;
             link.textContent = 'View listing ↗';
@@ -681,7 +689,6 @@ function attachListeners() {
         return;
       }
 
-      // Nullable loan detail overrides: empty field → revert to global default
       if (propField === 'interestRate') {
         prop.interestRate = target.value === '' ? null : parseFloat(target.value) / 100 || null;
         updatePropertyResult(prop, calcWAIncome(income, settings));
@@ -714,11 +721,16 @@ function attachListeners() {
   });
 }
 
+// --- Share ---
+
 function buildShareUrl(prop: Property): string {
   const payload = JSON.stringify({
     name: prop.name, listingUrl: prop.listingUrl, photoUrl: prop.photoUrl,
-    cost: prop.cost, downPayment: prop.downPayment, additionalFunds: prop.additionalFunds,
-    interestRate: prop.interestRate, durationMonths: prop.durationMonths,
+    cost: prop.cost,
+    downPayment: prop.downPayment ?? settings.defaultDownPayment,
+    additionalFunds: prop.additionalFunds,
+    interestRate: prop.interestRate ?? settings.defaultInterestRate,
+    durationMonths: prop.durationMonths ?? settings.defaultDurationMonths,
     monthlyTaxes: prop.monthlyTaxes, monthlyInsurance: prop.monthlyInsurance,
     hoa: prop.hoa, maintenancePct: prop.maintenancePct,
   });
@@ -735,31 +747,36 @@ function parseShareHash(): Property | null {
   } catch { return null; }
 }
 
-function renderShareBanner(prop: Property) {
-  return `
-    <div class="share-banner" id="share-banner">
-      <div class="share-banner-inner">
-        <span>Property shared with you: <strong>${prop.name || 'Unnamed property'}</strong></span>
-        <div class="share-banner-actions">
-          <button class="btn-secondary btn-sm" id="share-dismiss">Dismiss</button>
-          <button class="btn-primary btn-sm" id="share-add">Add Property</button>
-        </div>
-      </div>
-    </div>`;
+function preFillModal(prop: Property) {
+  const form = document.getElementById('add-prop-form') as HTMLFormElement;
+  const set = (name: string, value: string) => {
+    (form.elements.namedItem(name) as HTMLInputElement).value = value;
+  };
+  set('name', prop.name);
+  set('listingUrl', prop.listingUrl);
+  set('photoUrl', prop.photoUrl);
+  if (prop.cost) set('cost', String(prop.cost));
+  if (prop.monthlyTaxes) set('monthlyTaxes', String(prop.monthlyTaxes));
+  if (prop.monthlyInsurance) set('monthlyInsurance', String(prop.monthlyInsurance));
+  if (prop.hoa) set('hoa', String(prop.hoa));
+  if (prop.maintenancePct !== null) set('maintenancePct', (prop.maintenancePct * 100).toFixed(1));
+  if (prop.downPayment !== null) set('downPayment', String(prop.downPayment));
+  if (prop.additionalFunds) set('additionalFunds', String(prop.additionalFunds));
+  if (prop.interestRate !== null) set('interestRate', (prop.interestRate * 100).toFixed(3));
+  if (prop.durationMonths !== null) set('durationMonths', String(prop.durationMonths));
 }
 
-// Extracts a human-readable address from Redfin/Zillow URLs by parsing the path slug.
-// Redfin URL shape: /STATE/City/Street-Address-Zip/home/id
-// Zillow URL shape: /homedetails/street-address-city-state-zip/zpid/
+// --- URL parsing ---
+
 function parseListingUrl(url: string): { address: string } {
   try {
     const u = new URL(url);
     const segments = u.pathname.split('/').filter(Boolean);
     let slug = '';
     if (u.hostname.includes('redfin')) {
-      slug = segments[2] ?? ''; // address segment is at index 2 after state/city
+      slug = segments[2] ?? '';
     } else if (u.hostname.includes('zillow')) {
-      slug = segments[1] ?? ''; // address segment is at index 1 after 'homedetails'
+      slug = segments[1] ?? '';
     } else {
       slug = segments[0] ?? '';
     }
@@ -790,6 +807,10 @@ function loadState() {
 }
 
 loadState();
-pendingSharedProperty = parseShareHash();
-if (pendingSharedProperty) history.replaceState(null, '', location.pathname);
+const sharedProp = parseShareHash();
+if (sharedProp) history.replaceState(null, '', location.pathname);
 render();
+if (sharedProp) {
+  document.getElementById('add-prop-modal')!.classList.add('is-open');
+  preFillModal(sharedProp);
+}
