@@ -529,7 +529,7 @@ function attachListeners() {
     (document.getElementById('add-prop-form') as HTMLFormElement).reset();
   }
 
-  app.addEventListener('click', (e) => {
+  app.addEventListener('click', async (e) => {
     const target = e.target as HTMLElement;
 
     if (target.id === 'add-prop') { openModal(); return; }
@@ -587,10 +587,16 @@ function attachListeners() {
       const id = shareBtn.dataset.shareId!;
       const prop = properties.find(p => p.id === id);
       if (!prop) return;
-      navigator.clipboard.writeText(buildShareUrl(prop)).then(() => {
-        shareBtn.textContent = 'Copied!';
-        setTimeout(() => { shareBtn.textContent = 'Share'; }, 2000);
-      });
+      shareBtn.textContent = '…';
+      const longUrl = buildShareUrl(prop);
+      let urlToCopy = longUrl;
+      try {
+        const res = await fetch(`https://da.gd/shorten?url=${encodeURIComponent(longUrl)}`);
+        if (res.ok) urlToCopy = (await res.text()).trim();
+      } catch { /* fall back to long URL */ }
+      await navigator.clipboard.writeText(urlToCopy);
+      shareBtn.textContent = 'Copied!';
+      setTimeout(() => { shareBtn.textContent = 'Share'; }, 2000);
       return;
     }
 
@@ -746,17 +752,27 @@ function attachListeners() {
 
 // --- Share ---
 
+// Removes null, 0, and empty-string entries — reduces payload size significantly.
+function stripFalsy(obj: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== null && v !== 0 && v !== ''));
+}
+
 function buildShareUrl(prop: Property): string {
   const payload = JSON.stringify({
-    name: prop.name, listingUrl: prop.listingUrl, photoUrl: prop.photoUrl,
-    cost: prop.cost,
-    downPayment: prop.downPayment ?? settings.defaultDownPayment,
-    additionalFunds: prop.additionalFunds,
-    interestRate: prop.interestRate ?? settings.defaultInterestRate,
-    durationMonths: prop.durationMonths ?? settings.defaultDurationMonths,
-    monthlyTaxes: prop.monthlyTaxes, monthlyInsurance: prop.monthlyInsurance,
-    hoa: prop.hoa, maintenancePct: prop.maintenancePct,
-    finances: { income: { ...income }, settings: { ...settings } },
+    ...stripFalsy({
+      name: prop.name, listingUrl: prop.listingUrl, photoUrl: prop.photoUrl,
+      cost: prop.cost,
+      downPayment: prop.downPayment ?? settings.defaultDownPayment,
+      additionalFunds: prop.additionalFunds,
+      interestRate: prop.interestRate ?? settings.defaultInterestRate,
+      durationMonths: prop.durationMonths ?? settings.defaultDurationMonths,
+      monthlyTaxes: prop.monthlyTaxes, monthlyInsurance: prop.monthlyInsurance,
+      hoa: prop.hoa, maintenancePct: prop.maintenancePct,
+    }),
+    finances: {
+      income: stripFalsy({ ...income }),
+      settings: { ...settings }, // keep all settings — zeros are intentional (e.g. $0 default down)
+    },
   });
   return `${location.origin}${location.pathname}#share=${btoa(payload)}`;
 }
