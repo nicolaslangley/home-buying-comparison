@@ -448,7 +448,6 @@ function render() {
     <header class="site-header">
       <div class="container">
         <h1>Home Buying Calculator</h1>
-        <p>Seattle, WA</p>
       </div>
     </header>
 
