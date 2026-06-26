@@ -527,6 +527,31 @@ main {
   grid-column: 1 / -1;
 }
 
+.finance-import-lead {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 1.25rem;
+}
+
+.finance-preview {
+  margin-bottom: 0.5rem;
+}
+
+.finance-preview-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.8125rem;
+  gap: 0.5rem;
+}
+
+.finance-preview-row:last-child { border-bottom: none; }
+
+.finance-preview-row span:first-child { color: var(--text-secondary); }
+.finance-preview-row span:last-child { font-variant-numeric: tabular-nums; }
+
 .field-optional {
   font-weight: 400;
   text-transform: none;

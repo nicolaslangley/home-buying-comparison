@@ -32,6 +32,10 @@ let nextId = 1;
 const collapsedCards = new Set<string>();
 const collapsedSections = new Set<string>();
 
+// Pending share data — set on load when a #share= hash is present
+let pendingShareProp: Property | null = null;
+let pendingSharedFinances: { income: WAIncome; settings: GlobalSettings } | null = null;
+
 function newProperty(): Property {
   return {
     id: String(nextId++),
@@ -474,7 +478,8 @@ function render() {
         </section>
       </div>
     </main>
-    ${renderAddPropertyModal()}`;
+    ${renderAddPropertyModal()}
+    ${pendingSharedFinances ? renderFinanceImportModal(pendingSharedFinances) : ''}`;
 
   updateAllPropertyResults();
   attachListeners();
@@ -530,6 +535,24 @@ function attachListeners() {
     if (target.id === 'add-prop') { openModal(); return; }
     if (target.id === 'modal-close' || target.id === 'modal-cancel') { closeModal(); return; }
     if (target === modal) { closeModal(); return; }
+
+    // Finance import modal
+    if (target.id === 'finance-apply' || target.id === 'finance-skip' || target.id === 'finance-modal-close') {
+      if (target.id === 'finance-apply' && pendingSharedFinances) {
+        Object.assign(income, pendingSharedFinances.income);
+        Object.assign(settings, pendingSharedFinances.settings);
+        saveState();
+      }
+      pendingSharedFinances = null;
+      const prop = pendingShareProp;
+      pendingShareProp = null;
+      render();
+      if (prop) {
+        document.getElementById('add-prop-modal')!.classList.add('is-open');
+        preFillModal(prop);
+      }
+      return;
+    }
 
     // Collapse property card
     const collapseCardBtn = target.closest('[data-collapse-id]') as HTMLElement | null;
@@ -733,18 +756,58 @@ function buildShareUrl(prop: Property): string {
     durationMonths: prop.durationMonths ?? settings.defaultDurationMonths,
     monthlyTaxes: prop.monthlyTaxes, monthlyInsurance: prop.monthlyInsurance,
     hoa: prop.hoa, maintenancePct: prop.maintenancePct,
+    finances: { income: { ...income }, settings: { ...settings } },
   });
   return `${location.origin}${location.pathname}#share=${btoa(payload)}`;
 }
 
-function parseShareHash(): Property | null {
+function parseShareHash(): { prop: Property; finances?: { income: WAIncome; settings: GlobalSettings } } | null {
   if (!location.hash.startsWith('#share=')) return null;
   try {
-    const data = JSON.parse(atob(location.hash.slice(7)));
+    const { finances, ...propData } = JSON.parse(atob(location.hash.slice(7)));
     const prop = newProperty();
-    Object.assign(prop, data);
-    return prop;
+    Object.assign(prop, propData);
+    return { prop, finances: finances ?? undefined };
   } catch { return null; }
+}
+
+function renderFinanceImportModal(fin: { income: WAIncome; settings: GlobalSettings }) {
+  const { income: inc, settings: s } = fin;
+  const hasIncome = inc.salary1 || inc.salary2;
+  return `
+    <div class="modal-overlay is-open" id="finance-import-modal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="finance-modal-title">
+        <div class="modal-header">
+          <h2 id="finance-modal-title">Finance Settings Included</h2>
+          <button class="modal-close" id="finance-modal-close" aria-label="Close">×</button>
+        </div>
+        <div class="modal-form">
+          <p class="finance-import-lead">This link includes the sender's finance settings. Apply them so calculations are accurate for their situation?</p>
+          ${hasIncome ? `
+          <div class="modal-section-title">Income</div>
+          <div class="finance-preview">
+            ${inc.salary1 ? `<div class="finance-preview-row"><span>${inc.partner1Name}</span><span>${usd.format(inc.salary1)}/yr</span></div>` : ''}
+            ${inc.salary2 ? `<div class="finance-preview-row"><span>${inc.partner2Name}</span><span>${usd.format(inc.salary2)}/yr</span></div>` : ''}
+          </div>` : ''}
+          <div class="modal-section-title">Loan Defaults</div>
+          <div class="finance-preview">
+            <div class="finance-preview-row"><span>Interest rate</span><span>${(s.defaultInterestRate * 100).toFixed(3)}%</span></div>
+            <div class="finance-preview-row"><span>Down payment</span><span>${usd.format(s.defaultDownPayment)}</span></div>
+            <div class="finance-preview-row"><span>Loan term</span><span>${s.defaultDurationMonths} mo</span></div>
+          </div>
+          <div class="modal-section-title">Targets</div>
+          <div class="finance-preview">
+            <div class="finance-preview-row"><span>Savings target</span><span>${(s.targetSavingsPct * 100).toFixed(0)}% of gross</span></div>
+            <div class="finance-preview-row"><span>Housing target</span><span>${(s.targetHousingPct * 100).toFixed(0)}% of gross</span></div>
+            <div class="finance-preview-row"><span>Leftover spending</span><span>${usd.format(s.targetLeftoverSpending)}/mo</span></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" id="finance-skip">Keep my settings</button>
+            <button type="button" class="btn-primary" id="finance-apply">Apply settings</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
 }
 
 function preFillModal(prop: Property) {
@@ -807,10 +870,17 @@ function loadState() {
 }
 
 loadState();
-const sharedProp = parseShareHash();
-if (sharedProp) history.replaceState(null, '', location.pathname);
+const shared = parseShareHash();
+if (shared) {
+  history.replaceState(null, '', location.pathname);
+  pendingShareProp = shared.prop;
+  pendingSharedFinances = shared.finances ?? null;
+}
 render();
-if (sharedProp) {
+if (pendingSharedFinances) {
+  // Finance modal is already rendered with is-open; nothing extra needed
+} else if (pendingShareProp) {
   document.getElementById('add-prop-modal')!.classList.add('is-open');
-  preFillModal(sharedProp);
+  preFillModal(pendingShareProp);
+  pendingShareProp = null;
 }
