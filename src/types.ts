@@ -50,6 +50,7 @@ export interface PropertyCalcs {
   annualMaintenance: number; // 0.5% of purchase price per year
   pctOnFixed: number;       // fraction of net consumed by all fixed costs
   remainingDiscretionary: number; // net after all fixed costs
+  monthlyTaxSavings: number; // estimated monthly federal tax benefit from itemizing (mortgage interest + SALT)
 }
 
 // Derived from WAIncome (annual unless field name says otherwise)
@@ -57,6 +58,7 @@ export interface IncomeCalcs {
   grossHousehold: number;
   monthlyGross: number;
   totalDeductions: number;      // pre-tax retirement contributions
+  taxableIncome: number;        // federal taxable income (before itemized deductions)
   taxes: number;                // estimated annual tax burden
   netAnnual: number;
   netMonthly: number;

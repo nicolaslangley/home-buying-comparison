@@ -27,32 +27,32 @@ export function avgMonthlyPrincipal(rate: number, nper: number, pv: number, mont
   return sum / months;
 }
 
-// 2024 US federal income tax brackets for Married Filing Jointly.
-// Taxable income = gross - 401k - standard deduction ($29,200 MFJ for 2024).
+// 2026 US federal income tax brackets for Married Filing Jointly (IRS Rev. Proc. 2025-32).
+// Taxable income = gross - 401k - standard deduction ($32,200 MFJ for 2026).
 function fedTaxMFJ(taxable: number): number {
-  if (taxable <= 23200) return taxable * 0.10;
-  if (taxable <= 94300) return 23200 * 0.10 + (taxable - 23200) * 0.12;
-  if (taxable <= 201050) return 23200 * 0.10 + (94300 - 23200) * 0.12 + (taxable - 94300) * 0.22;
-  if (taxable <= 383900) return 23200 * 0.10 + (94300 - 23200) * 0.12 + (201050 - 94300) * 0.22 + (taxable - 201050) * 0.24;
-  if (taxable <= 487450) return 23200 * 0.10 + (94300 - 23200) * 0.12 + (201050 - 94300) * 0.22 + (383900 - 201050) * 0.24 + (taxable - 383900) * 0.32;
-  if (taxable <= 731200) return 23200 * 0.10 + (94300 - 23200) * 0.12 + (201050 - 94300) * 0.22 + (383900 - 201050) * 0.24 + (487450 - 383900) * 0.32 + (taxable - 487450) * 0.35;
-  return 23200 * 0.10 + (94300 - 23200) * 0.12 + (201050 - 94300) * 0.22 + (383900 - 201050) * 0.24 + (487450 - 383900) * 0.32 + (731200 - 487450) * 0.35 + (taxable - 731200) * 0.37;
+  if (taxable <= 24800) return taxable * 0.10;
+  if (taxable <= 100800) return 24800 * 0.10 + (taxable - 24800) * 0.12;
+  if (taxable <= 211400) return 24800 * 0.10 + (100800 - 24800) * 0.12 + (taxable - 100800) * 0.22;
+  if (taxable <= 403550) return 24800 * 0.10 + (100800 - 24800) * 0.12 + (211400 - 100800) * 0.22 + (taxable - 211400) * 0.24;
+  if (taxable <= 512450) return 24800 * 0.10 + (100800 - 24800) * 0.12 + (211400 - 100800) * 0.22 + (403550 - 211400) * 0.24 + (taxable - 403550) * 0.32;
+  if (taxable <= 768700) return 24800 * 0.10 + (100800 - 24800) * 0.12 + (211400 - 100800) * 0.22 + (403550 - 211400) * 0.24 + (512450 - 403550) * 0.32 + (taxable - 512450) * 0.35;
+  return 24800 * 0.10 + (100800 - 24800) * 0.12 + (211400 - 100800) * 0.22 + (403550 - 211400) * 0.24 + (512450 - 403550) * 0.32 + (768700 - 512450) * 0.35 + (taxable - 768700) * 0.37;
 }
 
-// FICA = Social Security (6.2% up to $168,600 wage base) + Medicare (1.45% uncapped)
-// + Additional Medicare (0.9% on income over $200k).
+// FICA = Social Security (6.2% up to $184,500 wage base) + Medicare (1.45% uncapped)
+// + Additional Medicare (0.9% on household income over $250k for MFJ).
 function fica(taxable: number): number {
-  return Math.min(taxable, 168600) * 0.062 + taxable * 0.0145 + (taxable > 200000 ? (taxable - 200000) * 0.009 : 0);
+  return Math.min(taxable, 184500) * 0.062 + taxable * 0.0145 + (taxable > 250000 ? (taxable - 250000) * 0.009 : 0);
 }
 
 // WA has no state income tax, so total tax = federal income tax + FICA.
 // Savings target = gross * savingsPct minus already-invested 401k (to avoid double-counting).
 export function calcWAIncome(income: WAIncome, settings: GlobalSettings): IncomeCalcs {
-  const stdDeduction = 29200; // 2024 MFJ standard deduction
+  const stdDeduction = 32200; // 2026 MFJ standard deduction
   const gross = income.salary1 + income.salary2;
   const totalDeductions = income.contribution401k1 + income.contribution401k2;
-  const taxable = Math.max(0, gross - totalDeductions - stdDeduction);
-  const taxes = fedTaxMFJ(taxable) + fica(taxable);
+  const taxableIncome = Math.max(0, gross - totalDeductions - stdDeduction);
+  const taxes = fedTaxMFJ(taxableIncome) + fica(taxableIncome);
   const netAnnual = gross - totalDeductions - taxes;
   const savingsTarget = gross * settings.targetSavingsPct - totalDeductions;
 
@@ -60,6 +60,7 @@ export function calcWAIncome(income: WAIncome, settings: GlobalSettings): Income
     grossHousehold: gross,
     monthlyGross: gross / 12,
     totalDeductions,
+    taxableIncome,
     taxes,
     netAnnual,
     netMonthly: netAnnual / 12,
@@ -68,6 +69,20 @@ export function calcWAIncome(income: WAIncome, settings: GlobalSettings): Income
     fixedMonthlyExpenses: income.fixedMonthlyExpenses,
     childcareCosts: income.childcareCosts,
   };
+}
+
+// Total mortgage interest paid in the first 12 months.
+function firstYearMortgageInterest(loanAmount: number, monthlyRate: number, nper: number): number {
+  if (monthlyRate === 0 || loanAmount <= 0) return 0;
+  const payment = pmt(monthlyRate, nper, loanAmount);
+  let balance = loanAmount;
+  let totalInterest = 0;
+  for (let i = 0; i < 12; i++) {
+    const interest = balance * monthlyRate;
+    totalInterest += interest;
+    balance -= (payment - interest);
+  }
+  return totalInterest;
 }
 
 export function calcProperty(
@@ -98,6 +113,19 @@ export function calcProperty(
     incomeCalcs.netMonthly;
   const remainingDiscretionary = incomeCalcs.netMonthly * (1 - pctOnFixed);
 
+  // Estimated annual federal tax savings from itemizing vs. standard deduction.
+  // Deductible mortgage interest is capped at the first $750k of loan principal.
+  // SALT (WA has no state income tax, so this is just property taxes) is capped at $10k/yr.
+  const stdDeduction = 32200; // 2026 MFJ standard deduction
+  const deductibleLoan = Math.min(loanAmount, 750000);
+  const mortgageInterest = firstYearMortgageInterest(deductibleLoan, monthlyRate, duration);
+  const saltDeduction = Math.min(prop.monthlyTaxes * 12, 10000);
+  const itemized = mortgageInterest + saltDeduction;
+  const extraDeduction = Math.max(0, itemized - stdDeduction);
+  // Only federal income tax (not FICA) is affected by itemized deductions.
+  const taxSavings = fedTaxMFJ(incomeCalcs.taxableIncome) - fedTaxMFJ(Math.max(0, incomeCalcs.taxableIncome - extraDeduction));
+  const monthlyTaxSavings = taxSavings / 12;
+
   return {
     totalDown,
     loanAmount,
@@ -110,5 +138,6 @@ export function calcProperty(
     annualMaintenance,
     pctOnFixed,
     remainingDiscretionary,
+    monthlyTaxSavings,
   };
 }

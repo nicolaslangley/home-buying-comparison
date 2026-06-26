@@ -311,21 +311,34 @@ function renderPropertyResults(prop: Property, calcs: PropertyCalcs) {
         <span class="result-value">${usd.format(prop.monthlyTaxes + prop.monthlyInsurance + prop.hoa)}</span>
       </div>
       <div class="result-row highlight">
-        <span class="result-label">Total Monthly</span>
+        <span class="result-label">Total Monthly Payment</span>
         <span class="result-value">${usd.format(calcs.totalMonthly)}</span>
+      </div>
+      <div class="result-row">
+        <span class="result-label">Avg. Towards Principal</span>
+        <span class="result-value result-savings">${usd.format(calcs.monthlyPrincipal)}</span>
+      </div>
+      ${calcs.monthlyTaxSavings > 0 ? `
+      <div class="result-row">
+        <span class="result-label">Est. Tax Savings</span>
+        <span class="result-value result-savings">${usd.format(calcs.monthlyTaxSavings)}</span>
+      </div>` : ''}
+      <div class="result-row">
+        <span class="result-label">Effective Monthly Cost</span>
+        <span class="result-value">${usd.format(calcs.totalMonthly - calcs.monthlyPrincipal - calcs.monthlyTaxSavings)}</span>
       </div>
     </div>
     <div class="result-group">
       <div class="result-group-title">Affordability</div>
       <div class="result-row">
-        <span class="result-label">% of Gross</span>
+        <span class="result-label">Payment % of Gross</span>
         <span class="result-value">
           <span class="badge ${housingPctClass}">${pct(calcs.pctOfGross)}</span>
           <span class="result-sub">target ≤ ${pct(settings.targetHousingPct)}</span>
         </span>
       </div>
       <div class="result-row">
-        <span class="result-label">% of Net</span>
+        <span class="result-label">Payment % of Net</span>
         <span class="result-value">${pct(calcs.pctOfNet)}</span>
       </div>
       <div class="result-row">
