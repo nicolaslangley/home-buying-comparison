@@ -269,8 +269,6 @@ function renderPropertyResults(prop: Property, calcs: PropertyCalcs) {
   const housingPctClass = badgeClass(calcs.pctOfGross, settings.targetHousingPct, settings.targetHousingPct + 0.05);
   const remainClass = calcs.remainingIncome >= settings.targetLeftoverSpending ? 'badge-good'
     : calcs.remainingIncome >= settings.targetLeftoverSpending * 0.8 ? 'badge-warn' : 'badge-bad';
-  const discClass = calcs.remainingDiscretionary >= 3000 ? 'badge-good'
-    : calcs.remainingDiscretionary >= 1500 ? 'badge-warn' : 'badge-bad';
 
   const fixedPct = calcs.pctOnFixed;
   const fixedClass = fixedPct <= 0.75 ? 'badge-good' : fixedPct <= 0.80 ? 'badge-warn' : 'badge-bad';
@@ -364,7 +362,7 @@ function renderPropertyResults(prop: Property, calcs: PropertyCalcs) {
       <div class="result-row highlight">
         <span class="result-label">Remaining Discretionary</span>
         <span class="result-value">
-          <span class="badge ${discClass}">${usd.format(calcs.remainingDiscretionary)}/mo</span>
+          <span">${usd.format(calcs.remainingDiscretionary)}/mo</span>
         </span>
       </div>
     </div>`;
