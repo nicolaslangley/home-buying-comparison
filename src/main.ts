@@ -30,6 +30,7 @@ const income: WAIncome = {
 
 let properties: Property[] = [];
 let nextId = 1;
+let pendingSharedProperty: Property | null = null;
 
 function newProperty(): Property {
   return {
@@ -201,6 +202,7 @@ function renderPropertyCard(prop: Property) {
         <input class="property-name-input" type="text" placeholder="Property name / address"
           data-prop-field="name" value="${prop.name}">
         ${prop.listingUrl ? `<a class="listing-link" href="${prop.listingUrl}" target="_blank" rel="noopener">View listing ↗</a>` : ''}
+        <button class="btn-share" data-share-id="${prop.id}" title="Copy share link">Share</button>
         <button class="btn-remove" data-remove-id="${prop.id}" title="Remove">×</button>
       </div>
       <div class="property-card-body">
@@ -438,6 +440,7 @@ function render() {
   const incomeCalcs = calcWAIncome(income, settings);
 
   getApp().innerHTML = `
+    ${pendingSharedProperty ? renderShareBanner(pendingSharedProperty) : ''}
     <header class="site-header">
       <div class="container">
         <h1>Home Buying Calculator</h1>
@@ -528,6 +531,33 @@ function attachListeners() {
     if (target.id === 'add-prop') { openModal(); return; }
     if (target.id === 'modal-close' || target.id === 'modal-cancel') { closeModal(); return; }
     if (target === modal) { closeModal(); return; } // backdrop click
+
+    if (target.id === 'share-add') {
+      if (pendingSharedProperty) {
+        properties.push(pendingSharedProperty);
+        pendingSharedProperty = null;
+        saveState();
+        render();
+      }
+      return;
+    }
+    if (target.id === 'share-dismiss') {
+      pendingSharedProperty = null;
+      document.getElementById('share-banner')?.remove();
+      return;
+    }
+
+    const shareBtn = target.closest('[data-share-id]') as HTMLElement | null;
+    if (shareBtn) {
+      const id = (shareBtn as HTMLElement).dataset.shareId!;
+      const prop = properties.find(p => p.id === id);
+      if (!prop) return;
+      navigator.clipboard.writeText(buildShareUrl(prop)).then(() => {
+        shareBtn.textContent = 'Copied!';
+        setTimeout(() => { shareBtn.textContent = 'Share'; }, 2000);
+      });
+      return;
+    }
 
     const removeBtn = target.closest('[data-remove-id]') as HTMLElement | null;
     if (removeBtn) {
@@ -684,6 +714,40 @@ function attachListeners() {
   });
 }
 
+function buildShareUrl(prop: Property): string {
+  const payload = JSON.stringify({
+    name: prop.name, listingUrl: prop.listingUrl, photoUrl: prop.photoUrl,
+    cost: prop.cost, downPayment: prop.downPayment, additionalFunds: prop.additionalFunds,
+    interestRate: prop.interestRate, durationMonths: prop.durationMonths,
+    monthlyTaxes: prop.monthlyTaxes, monthlyInsurance: prop.monthlyInsurance,
+    hoa: prop.hoa, maintenancePct: prop.maintenancePct,
+  });
+  return `${location.origin}${location.pathname}#share=${btoa(payload)}`;
+}
+
+function parseShareHash(): Property | null {
+  if (!location.hash.startsWith('#share=')) return null;
+  try {
+    const data = JSON.parse(atob(location.hash.slice(7)));
+    const prop = newProperty();
+    Object.assign(prop, data);
+    return prop;
+  } catch { return null; }
+}
+
+function renderShareBanner(prop: Property) {
+  return `
+    <div class="share-banner" id="share-banner">
+      <div class="share-banner-inner">
+        <span>Property shared with you: <strong>${prop.name || 'Unnamed property'}</strong></span>
+        <div class="share-banner-actions">
+          <button class="btn-secondary btn-sm" id="share-dismiss">Dismiss</button>
+          <button class="btn-primary btn-sm" id="share-add">Add Property</button>
+        </div>
+      </div>
+    </div>`;
+}
+
 // Extracts a human-readable address from Redfin/Zillow URLs by parsing the path slug.
 // Redfin URL shape: /STATE/City/Street-Address-Zip/home/id
 // Zillow URL shape: /homedetails/street-address-city-state-zip/zpid/
@@ -726,4 +790,6 @@ function loadState() {
 }
 
 loadState();
+pendingSharedProperty = parseShareHash();
+if (pendingSharedProperty) history.replaceState(null, '', location.pathname);
 render();
