@@ -1,6 +1,11 @@
 import './style.css';
 import { calcWAIncome, calcProperty } from './calculator';
 import type { GlobalSettings, WAIncome, Property, IncomeCalcs, PropertyCalcs } from './types';
+import {
+  signInWithGoogle, signOutUser, onAuthChanged,
+  saveToFirestore, loadFromFirestore, subscribeToFirestore,
+  type AppState,
+} from './firebase';
 
 // --- State ---
 
@@ -35,6 +40,10 @@ const collapsedSections = new Set<string>();
 // Pending share data — set on load when a #share= hash is present
 let pendingShareProp: Property | null = null;
 let pendingSharedFinances: { income: WAIncome; settings: GlobalSettings } | null = null;
+
+// Auth state
+let currentUser: { email: string; displayName: string } | null = null;
+let unsubscribeFirestore: (() => void) | null = null;
 
 function newProperty(): Property {
   return {
@@ -459,6 +468,12 @@ function render() {
     <header class="site-header">
       <div class="container">
         <h1>Home Buying Comparison</h1>
+        <div class="auth-bar">
+          ${currentUser
+            ? `<span class="auth-user">${currentUser.displayName}</span>
+               <button class="auth-btn" id="auth-signout">Sign out</button>`
+            : `<button class="auth-btn" id="auth-signin">Sign in with Google</button>`}
+        </div>
       </div>
     </header>
 
@@ -538,6 +553,9 @@ function attachListeners() {
     modal.classList.remove('is-open');
     (document.getElementById('add-prop-form') as HTMLFormElement).reset();
   }
+
+  document.getElementById('auth-signin')?.addEventListener('click', () => signInWithGoogle());
+  document.getElementById('auth-signout')?.addEventListener('click', () => signOutUser());
 
   app.addEventListener('click', async (e) => {
     const target = e.target as HTMLElement;
@@ -880,7 +898,9 @@ function parseListingUrl(url: string): { address: string } {
 const STORAGE_KEY = 'hbc-state';
 
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ income, settings, properties, nextId }));
+  const state = { income, settings, properties, nextId };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  if (currentUser) saveToFirestore(state);
 }
 
 function loadState() {
@@ -893,6 +913,14 @@ function loadState() {
     if (Array.isArray(s.properties)) properties = s.properties;
     if (s.nextId) nextId = s.nextId;
   } catch { /* ignore corrupt data */ }
+}
+
+function applyState(s: AppState) {
+  Object.assign(income, s.income);
+  Object.assign(settings, s.settings);
+  properties = s.properties;
+  nextId = s.nextId;
+  render();
 }
 
 loadState();
@@ -910,3 +938,24 @@ if (pendingSharedFinances) {
   preFillModal(pendingShareProp);
   pendingShareProp = null;
 }
+
+onAuthChanged(async (user) => {
+  // Stop any existing Firestore listener before switching state
+  if (unsubscribeFirestore) { unsubscribeFirestore(); unsubscribeFirestore = null; }
+
+  currentUser = user;
+  render(); // update auth bar immediately
+
+  if (!user) return;
+
+  const remote = await loadFromFirestore();
+  if (remote) {
+    applyState(remote);
+  } else {
+    // First sign-in: migrate localStorage data up to Firestore
+    const localRaw = localStorage.getItem(STORAGE_KEY);
+    if (localRaw) saveToFirestore({ income, settings, properties, nextId });
+  }
+
+  unsubscribeFirestore = subscribeToFirestore(applyState);
+});
