@@ -100,11 +100,11 @@ function renderIncomeInputsContent() {
         <input type="number" data-income="salary2" value="${income.salary2 || ''}" placeholder="0" min="0" step="1000">
       </div>
       <div class="field">
-        <label><span data-partner-name="1">${income.partner1Name}</span> 401k</label>
+        <label><span data-partner-name="1">${income.partner1Name}</span> 401k Contribution</label>
         <input type="number" data-income="contribution401k1" value="${income.contribution401k1 || ''}" placeholder="0" min="0" step="500">
       </div>
       <div class="field">
-        <label><span data-partner-name="2">${income.partner2Name}</span> 401k</label>
+        <label><span data-partner-name="2">${income.partner2Name}</span> 401k Contribution</label>
         <input type="number" data-income="contribution401k2" value="${income.contribution401k2 || ''}" placeholder="0" min="0" step="500">
       </div>
     </div>`;
@@ -190,7 +190,7 @@ function renderIncomeResultsContent(calcs: IncomeCalcs) {
       <span class="result-value">${usd.format(calcs.netMonthly)}</span>
     </div>
     <div class="result-row">
-      <span class="result-label">Monthly Savings Target</span>
+      <span class="result-label">Monthly Savings Target (after 401k)</span>
       <span class="result-value">${usd.format(calcs.monthlySavingsTarget)}</span>
     </div>`;
 }
