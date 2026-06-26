@@ -447,7 +447,7 @@ function render() {
   getApp().innerHTML = `
     <header class="site-header">
       <div class="container">
-        <h1>Home Buying Calculator</h1>
+        <h1>Home Buying Comparison</h1>
       </div>
     </header>
 
