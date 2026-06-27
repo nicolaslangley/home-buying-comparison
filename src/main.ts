@@ -37,14 +37,11 @@ let nextId = 1;
 const collapsedCards = new Set<string>();
 const collapsedSections = new Set<string>();
 
-// Pending share data — set on load when a #share= hash is present
-let pendingShareProp: Property | null = null;
-let pendingSharedFinances: { income: WAIncome; settings: GlobalSettings } | null = null;
-
 // Auth state
 let currentUser: { email: string; displayName: string } | null = null;
 let unsubscribeFirestore: (() => void) | null = null;
 
+// Returns a blank Property with a new unique id.
 function newProperty(): Property {
   return {
     id: String(nextId++),
@@ -68,6 +65,7 @@ function newProperty(): Property {
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
 
+// Returns a CSS badge class name based on how n compares to warn and bad thresholds.
 function badgeClass(n: number, warn: number, bad: number) {
   if (n <= warn) return 'badge-good';
   if (n <= bad) return 'badge-warn';
@@ -91,6 +89,7 @@ function incomeCard(key: string, title: string, content: string, extraAttrs = ''
     </div>`;
 }
 
+// Renders the salary and 401k input fields for both partners.
 function renderIncomeInputsContent() {
   return `
     <div class="partner-names">
@@ -119,6 +118,7 @@ function renderIncomeInputsContent() {
     </div>`;
 }
 
+// Renders the default interest rate, down payment, and loan term inputs.
 function renderLoanDefaultsContent() {
   return `
     <div class="income-inputs-grid">
@@ -137,6 +137,7 @@ function renderLoanDefaultsContent() {
     </div>`;
 }
 
+// Renders the fixed monthly expenses and childcare input fields.
 function renderMonthlyExpensesContent() {
   return `
     <div class="income-inputs-grid">
@@ -151,6 +152,7 @@ function renderMonthlyExpensesContent() {
     </div>`;
 }
 
+// Renders the savings target, housing target, leftover spending, and principal toggle inputs.
 function renderTargetsContent() {
   return `
     <div class="settings-grid">
@@ -176,6 +178,7 @@ function renderTargetsContent() {
     </div>`;
 }
 
+// Renders the calculated income summary showing gross, taxes, net income, and savings target.
 function renderIncomeResultsContent(calcs: IncomeCalcs) {
   return `
     <div class="result-row">
@@ -206,6 +209,7 @@ function renderIncomeResultsContent(calcs: IncomeCalcs) {
 
 // --- Property card ---
 
+// Renders a full property card with input fields and a placeholder results panel.
 function renderPropertyCard(prop: Property) {
   const collapsed = collapsedCards.has(prop.id);
   return `
@@ -216,7 +220,6 @@ function renderPropertyCard(prop: Property) {
           data-prop-field="name" value="${prop.name}">
         <div class="property-card-actions">
           ${prop.listingUrl ? `<a class="listing-link" href="${prop.listingUrl}" target="_blank" rel="noopener">View listing ↗</a>` : ''}
-          <button class="btn-share" data-share-id="${prop.id}" title="Copy share link">Share</button>
           <button class="btn-section-toggle" data-collapse-id="${prop.id}" title="Toggle details">${collapsed ? '▸' : '▾'}</button>
           <button class="btn-remove" data-remove-id="${prop.id}" title="Remove">×</button>
         </div>
@@ -274,6 +277,7 @@ function renderPropertyCard(prop: Property) {
     </div>`;
 }
 
+// Renders the calculated loan, monthly cost, affordability, and budget rows for a property.
 function renderPropertyResults(prop: Property, calcs: PropertyCalcs) {
   const housingPctClass = badgeClass(calcs.pctOfGross, settings.targetHousingPct, settings.targetHousingPct + 0.05);
   const remainClass = calcs.remainingIncome >= settings.targetLeftoverSpending ? 'badge-good'
@@ -379,6 +383,7 @@ function renderPropertyResults(prop: Property, calcs: PropertyCalcs) {
 
 // --- Add Property modal ---
 
+// Renders the Add Property modal form.
 function renderAddPropertyModal() {
   const defaultRate = (settings.defaultInterestRate * 100).toFixed(3);
   const defaultDuration = settings.defaultDurationMonths;
@@ -456,10 +461,12 @@ function renderAddPropertyModal() {
 
 // --- Render ---
 
+// Returns the root #app element.
 function getApp() {
   return document.getElementById('app')!;
 }
 
+// Returns the auth bar HTML for the current sign-in state.
 function renderAuthBarHTML(): string {
   return currentUser
     ? `<span class="auth-user">${currentUser.displayName}</span>
@@ -467,7 +474,7 @@ function renderAuthBarHTML(): string {
     : `<button class="auth-btn" id="auth-signin">Sign in with Google</button>`;
 }
 
-// Updates only the auth bar without a full re-render (avoids image flicker).
+// Updates only the auth bar in place to avoid a full re-render that would cause image flicker.
 function updateAuthBar() {
   const bar = document.querySelector('.auth-bar');
   if (!bar) return;
@@ -476,6 +483,7 @@ function updateAuthBar() {
   document.getElementById('auth-signout')?.addEventListener('click', () => signOutUser());
 }
 
+// Rebuilds the entire app UI from current state.
 function render() {
   const incomeCalcs = calcWAIncome(income, settings);
   const financesCollapsed = collapsedSections.has('finances');
@@ -514,13 +522,13 @@ function render() {
         </section>
       </div>
     </main>
-    ${renderAddPropertyModal()}
-    ${pendingSharedFinances ? renderFinanceImportModal(pendingSharedFinances) : ''}`;
+    ${renderAddPropertyModal()}`;
 
   updateAllPropertyResults();
   attachListeners();
 }
 
+// Refreshes the results panel for every property card.
 function updateAllPropertyResults() {
   const incomeCalcs = calcWAIncome(income, settings);
   for (const prop of properties) {
@@ -528,6 +536,7 @@ function updateAllPropertyResults() {
   }
 }
 
+// Refreshes the results panel for a single property card.
 function updatePropertyResult(prop: Property, incomeCalcs: IncomeCalcs) {
   const el = document.getElementById(`results-${prop.id}`);
   if (!el) return;
@@ -540,7 +549,7 @@ function updatePropertyResult(prop: Property, incomeCalcs: IncomeCalcs) {
   el.innerHTML = renderPropertyResults(prop, calcProperty(prop, incomeCalcs, settings));
 }
 
-// Updates only the Calculated card body without a full re-render.
+// Updates only the Calculated card body in place to avoid a full re-render that would cause image flicker.
 function updateIncomeResults() {
   const incomeCalcs = calcWAIncome(income, settings);
   const card = document.getElementById('income-results-card');
@@ -551,46 +560,29 @@ function updateIncomeResults() {
 
 // --- Event handling (delegated) ---
 
+// Attaches all delegated event listeners to the app after a render.
 function attachListeners() {
   const app = getApp();
   const modal = document.getElementById('add-prop-modal')!;
 
+  // Opens the Add Property modal and focuses the name input.
   function openModal() {
     modal.classList.add('is-open');
     (modal.querySelector('input[name="name"]') as HTMLInputElement)?.focus();
   }
 
+  // Closes the Add Property modal and resets its form.
   function closeModal() {
     modal.classList.remove('is-open');
     (document.getElementById('add-prop-form') as HTMLFormElement).reset();
   }
 
-  app.addEventListener('click', async (e) => {
+  app.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
 
     if (target.id === 'add-prop') { openModal(); return; }
     if (target.id === 'modal-close' || target.id === 'modal-cancel') { closeModal(); return; }
     if (target === modal) { closeModal(); return; }
-
-    // Finance import modal
-    if (target.id === 'finance-apply' || target.id === 'finance-skip' || target.id === 'finance-modal-close') {
-      if (target.id === 'finance-apply' && pendingSharedFinances) {
-        Object.assign(income, pendingSharedFinances.income);
-        Object.assign(settings, pendingSharedFinances.settings);
-        saveState();
-        updateIncomeResults();
-        updateAllPropertyResults();
-      }
-      pendingSharedFinances = null;
-      const prop = pendingShareProp;
-      pendingShareProp = null;
-      document.getElementById('finance-import-modal')?.remove();
-      if (prop) {
-        document.getElementById('add-prop-modal')!.classList.add('is-open');
-        preFillModal(prop);
-      }
-      return;
-    }
 
     // Collapse property card
     const collapseCardBtn = target.closest('[data-collapse-id]') as HTMLElement | null;
@@ -618,25 +610,6 @@ function attachListeners() {
         card?.classList.toggle('is-collapsed', isNowCollapsed);
       }
       saveLocalState();
-      return;
-    }
-
-    // Share button
-    const shareBtn = target.closest('[data-share-id]') as HTMLElement | null;
-    if (shareBtn) {
-      const id = shareBtn.dataset.shareId!;
-      const prop = properties.find(p => p.id === id);
-      if (!prop) return;
-      shareBtn.textContent = '…';
-      const longUrl = buildShareUrl(prop);
-      let urlToCopy = longUrl;
-      try {
-        const res = await fetch(`https://da.gd/shorten?url=${encodeURIComponent(longUrl)}`);
-        if (res.ok) urlToCopy = (await res.text()).trim();
-      } catch { /* fall back to long URL */ }
-      await navigator.clipboard.writeText(urlToCopy);
-      shareBtn.textContent = 'Copied!';
-      setTimeout(() => { shareBtn.textContent = 'Share'; }, 2000);
       return;
     }
 
@@ -791,103 +764,9 @@ function attachListeners() {
   });
 }
 
-// --- Share ---
-
-// Removes null, 0, and empty-string entries — reduces payload size significantly.
-function stripFalsy(obj: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== null && v !== 0 && v !== ''));
-}
-
-function buildShareUrl(prop: Property): string {
-  const payload = JSON.stringify({
-    ...stripFalsy({
-      name: prop.name, listingUrl: prop.listingUrl, photoUrl: prop.photoUrl,
-      cost: prop.cost,
-      downPayment: prop.downPayment ?? settings.defaultDownPayment,
-      additionalFunds: prop.additionalFunds,
-      interestRate: prop.interestRate ?? settings.defaultInterestRate,
-      durationMonths: prop.durationMonths ?? settings.defaultDurationMonths,
-      monthlyTaxes: prop.monthlyTaxes, monthlyInsurance: prop.monthlyInsurance,
-      hoa: prop.hoa, maintenancePct: prop.maintenancePct,
-    }),
-    finances: {
-      income: stripFalsy({ ...income }),
-      settings: { ...settings }, // keep all settings — zeros are intentional (e.g. $0 default down)
-    },
-  });
-  return `${location.origin}${location.pathname}#share=${btoa(payload)}`;
-}
-
-function parseShareHash(): { prop: Property; finances?: { income: WAIncome; settings: GlobalSettings } } | null {
-  if (!location.hash.startsWith('#share=')) return null;
-  try {
-    const { finances, ...propData } = JSON.parse(atob(location.hash.slice(7)));
-    const prop = newProperty();
-    Object.assign(prop, propData);
-    return { prop, finances: finances ?? undefined };
-  } catch { return null; }
-}
-
-function renderFinanceImportModal(fin: { income: WAIncome; settings: GlobalSettings }) {
-  const { income: inc, settings: s } = fin;
-  const hasIncome = inc.salary1 || inc.salary2;
-  return `
-    <div class="modal-overlay is-open" id="finance-import-modal">
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="finance-modal-title">
-        <div class="modal-header">
-          <h2 id="finance-modal-title">Finance Settings Included</h2>
-          <button class="modal-close" id="finance-modal-close" aria-label="Close">×</button>
-        </div>
-        <div class="modal-form">
-          <p class="finance-import-lead">This link includes the sender's finance settings. Apply them so calculations are accurate for their situation?</p>
-          ${hasIncome ? `
-          <div class="modal-section-title">Income</div>
-          <div class="finance-preview">
-            ${inc.salary1 ? `<div class="finance-preview-row"><span>${inc.partner1Name}</span><span>${usd.format(inc.salary1)}/yr</span></div>` : ''}
-            ${inc.salary2 ? `<div class="finance-preview-row"><span>${inc.partner2Name}</span><span>${usd.format(inc.salary2)}/yr</span></div>` : ''}
-          </div>` : ''}
-          <div class="modal-section-title">Loan Defaults</div>
-          <div class="finance-preview">
-            <div class="finance-preview-row"><span>Interest rate</span><span>${(s.defaultInterestRate * 100).toFixed(3)}%</span></div>
-            <div class="finance-preview-row"><span>Down payment</span><span>${usd.format(s.defaultDownPayment)}</span></div>
-            <div class="finance-preview-row"><span>Loan term</span><span>${s.defaultDurationMonths} mo</span></div>
-          </div>
-          <div class="modal-section-title">Targets</div>
-          <div class="finance-preview">
-            <div class="finance-preview-row"><span>Savings target</span><span>${(s.targetSavingsPct * 100).toFixed(0)}% of gross</span></div>
-            <div class="finance-preview-row"><span>Housing target</span><span>${(s.targetHousingPct * 100).toFixed(0)}% of gross</span></div>
-            <div class="finance-preview-row"><span>Leftover spending</span><span>${usd.format(s.targetLeftoverSpending)}/mo</span></div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn-secondary" id="finance-skip">Keep my settings</button>
-            <button type="button" class="btn-primary" id="finance-apply">Apply settings</button>
-          </div>
-        </div>
-      </div>
-    </div>`;
-}
-
-function preFillModal(prop: Property) {
-  const form = document.getElementById('add-prop-form') as HTMLFormElement;
-  const set = (name: string, value: string) => {
-    (form.elements.namedItem(name) as HTMLInputElement).value = value;
-  };
-  set('name', prop.name);
-  set('listingUrl', prop.listingUrl);
-  set('photoUrl', prop.photoUrl);
-  if (prop.cost) set('cost', String(prop.cost));
-  if (prop.monthlyTaxes) set('monthlyTaxes', String(prop.monthlyTaxes));
-  if (prop.monthlyInsurance) set('monthlyInsurance', String(prop.monthlyInsurance));
-  if (prop.hoa) set('hoa', String(prop.hoa));
-  if (prop.maintenancePct !== null) set('maintenancePct', (prop.maintenancePct * 100).toFixed(1));
-  if (prop.downPayment !== null) set('downPayment', String(prop.downPayment));
-  if (prop.additionalFunds) set('additionalFunds', String(prop.additionalFunds));
-  if (prop.interestRate !== null) set('interestRate', (prop.interestRate * 100).toFixed(3));
-  if (prop.durationMonths !== null) set('durationMonths', String(prop.durationMonths));
-}
-
 // --- URL parsing ---
 
+// Extracts a human-readable address from a Redfin or Zillow listing URL.
 function parseListingUrl(url: string): { address: string } {
   try {
     const u = new URL(url);
@@ -912,6 +791,7 @@ const STORAGE_KEY = 'hbc-state';
 
 let firestoreDebounce: ReturnType<typeof setTimeout> | null = null;
 
+// Saves all state to localStorage and schedules a debounced Firestore write if signed in.
 function saveState() {
   const appState: AppState = { income, settings, properties, nextId };
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -925,7 +805,7 @@ function saveState() {
   }
 }
 
-// Persists only collapse state — no Firestore write needed since it's local UI only.
+// Saves collapse state to localStorage only, skipping Firestore since collapse is local UI state.
 function saveLocalState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     income, settings, properties, nextId,
@@ -934,6 +814,7 @@ function saveLocalState() {
   }));
 }
 
+// Hydrates module state from localStorage on startup for an immediate first paint.
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -948,6 +829,7 @@ function loadState() {
   } catch { /* ignore corrupt data */ }
 }
 
+// Applies a remote AppState snapshot to module state and triggers a full re-render.
 function applyState(s: AppState) {
   Object.assign(income, s.income);
   Object.assign(settings, s.settings);
@@ -957,20 +839,7 @@ function applyState(s: AppState) {
 }
 
 loadState();
-const shared = parseShareHash();
-if (shared) {
-  history.replaceState(null, '', location.pathname);
-  pendingShareProp = shared.prop;
-  pendingSharedFinances = shared.finances ?? null;
-}
 render();
-if (pendingSharedFinances) {
-  // Finance modal is already rendered with is-open; nothing extra needed
-} else if (pendingShareProp) {
-  document.getElementById('add-prop-modal')!.classList.add('is-open');
-  preFillModal(pendingShareProp);
-  pendingShareProp = null;
-}
 
 onAuthChanged(async (user) => {
   // Stop any existing Firestore listener before switching state

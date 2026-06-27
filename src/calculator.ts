@@ -1,22 +1,19 @@
 import type { WAIncome, Property, PropertyCalcs, IncomeCalcs, GlobalSettings } from './types';
 
-// Excel PMT equivalent: computes fixed periodic payment for a loan.
-// rate = periodic interest rate, nper = total periods, pv = loan principal.
+// Computes the fixed periodic payment for a loan (Excel PMT equivalent).
 export function pmt(rate: number, nper: number, pv: number): number {
   if (rate === 0) return pv / nper;
   return (rate * pv) / (1 - Math.pow(1 + rate, -nper));
 }
 
-// Excel PPMT equivalent: principal portion of the payment for period `per`.
+// Returns the principal portion of payment number `per` (Excel PPMT equivalent).
 function ppmt(rate: number, per: number, nper: number, pv: number): number {
   const payment = pmt(rate, nper, pv);
   const interest = pv * rate * Math.pow(1 + rate, per - 1) - (Math.pow(1 + rate, per - 1) - 1) * payment;
   return payment - interest;
 }
 
-// Average monthly principal paid over the first `months` payments.
-// Mirrors the spreadsheet's =SUM(PPMT(...))/60 approach — early payments are mostly interest,
-// so this understates long-run principal paydown but gives a conservative near-term figure.
+// Returns average monthly principal paid over the first `months` payments (conservative near-term estimate).
 export function avgMonthlyPrincipal(rate: number, nper: number, pv: number, months = 60): number {
   const monthlyRate = rate / 12;
   if (monthlyRate === 0) return pv / nper;
@@ -27,8 +24,7 @@ export function avgMonthlyPrincipal(rate: number, nper: number, pv: number, mont
   return sum / months;
 }
 
-// 2026 US federal income tax brackets for Married Filing Jointly (IRS Rev. Proc. 2025-32).
-// Taxable income = gross - 401k - standard deduction ($32,200 MFJ for 2026).
+// Computes 2026 federal income tax for Married Filing Jointly.
 function fedTaxMFJ(taxable: number): number {
   if (taxable <= 24800) return taxable * 0.10;
   if (taxable <= 100800) return 24800 * 0.10 + (taxable - 24800) * 0.12;
@@ -39,14 +35,12 @@ function fedTaxMFJ(taxable: number): number {
   return 24800 * 0.10 + (100800 - 24800) * 0.12 + (211400 - 100800) * 0.22 + (403550 - 211400) * 0.24 + (512450 - 403550) * 0.32 + (768700 - 512450) * 0.35 + (taxable - 768700) * 0.37;
 }
 
-// FICA = Social Security (6.2% up to $184,500 wage base) + Medicare (1.45% uncapped)
-// + Additional Medicare (0.9% on household income over $250k for MFJ).
+// Computes FICA taxes (Social Security + Medicare) on wages.
 function fica(taxable: number): number {
   return Math.min(taxable, 184500) * 0.062 + taxable * 0.0145 + (taxable > 250000 ? (taxable - 250000) * 0.009 : 0);
 }
 
-// WA has no state income tax, so total tax = federal income tax + FICA.
-// Savings target = gross * savingsPct minus already-invested 401k (to avoid double-counting).
+// Derives net income, taxes, and savings targets from household income inputs.
 export function calcWAIncome(income: WAIncome, settings: GlobalSettings): IncomeCalcs {
   const stdDeduction = 32200; // 2026 MFJ standard deduction
   const gross = income.salary1 + income.salary2;
@@ -85,6 +79,7 @@ function firstYearMortgageInterest(loanAmount: number, monthlyRate: number, nper
   return totalInterest;
 }
 
+// Computes all monthly cost, affordability, and tax savings metrics for a property.
 export function calcProperty(
   prop: Property,
   incomeCalcs: IncomeCalcs,
