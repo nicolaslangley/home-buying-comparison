@@ -460,14 +460,18 @@ function getApp() {
   return document.getElementById('app')!;
 }
 
+function renderAuthBarHTML(): string {
+  return currentUser
+    ? `<span class="auth-user">${currentUser.displayName}</span>
+       <button class="auth-btn" id="auth-signout">Sign out</button>`
+    : `<button class="auth-btn" id="auth-signin">Sign in with Google</button>`;
+}
+
 // Updates only the auth bar without a full re-render (avoids image flicker).
 function updateAuthBar() {
   const bar = document.querySelector('.auth-bar');
   if (!bar) return;
-  bar.innerHTML = currentUser
-    ? `<span class="auth-user">${currentUser.displayName}</span>
-       <button class="auth-btn" id="auth-signout">Sign out</button>`
-    : `<button class="auth-btn" id="auth-signin">Sign in with Google</button>`;
+  bar.innerHTML = renderAuthBarHTML();
   document.getElementById('auth-signin')?.addEventListener('click', () => signInWithGoogle());
   document.getElementById('auth-signout')?.addEventListener('click', () => signOutUser());
 }
@@ -480,12 +484,7 @@ function render() {
     <header class="site-header">
       <div class="container">
         <h1>Home Buying Comparison</h1>
-        <div class="auth-bar">
-          ${currentUser
-            ? `<span class="auth-user">${currentUser.displayName}</span>
-               <button class="auth-btn" id="auth-signout">Sign out</button>`
-            : `<button class="auth-btn" id="auth-signin">Sign in with Google</button>`}
-        </div>
+        <div class="auth-bar">${renderAuthBarHTML()}</div>
       </div>
     </header>
 
@@ -566,9 +565,6 @@ function attachListeners() {
     (document.getElementById('add-prop-form') as HTMLFormElement).reset();
   }
 
-  document.getElementById('auth-signin')?.addEventListener('click', () => signInWithGoogle());
-  document.getElementById('auth-signout')?.addEventListener('click', () => signOutUser());
-
   app.addEventListener('click', async (e) => {
     const target = e.target as HTMLElement;
 
@@ -604,7 +600,7 @@ function attachListeners() {
       const card = document.querySelector(`[data-id="${id}"]`) as HTMLElement | null;
       if (card) card.classList.toggle('is-collapsed', collapsedCards.has(id));
       collapseCardBtn.textContent = collapsedCards.has(id) ? '▸' : '▾';
-      saveState();
+      saveLocalState();
       return;
     }
 
@@ -621,7 +617,7 @@ function attachListeners() {
         const card = document.querySelector(`[data-income-card="${key}"] .income-card-body`);
         card?.classList.toggle('is-collapsed', isNowCollapsed);
       }
-      saveState();
+      saveLocalState();
       return;
     }
 
@@ -679,10 +675,7 @@ function attachListeners() {
     properties.push(prop);
     saveState();
     closeModal();
-    const grid = document.getElementById('props')!;
-    const temp = document.createElement('div');
-    temp.innerHTML = renderPropertyCard(prop);
-    grid.appendChild(temp.firstElementChild!);
+    document.getElementById('props')!.insertAdjacentHTML('beforeend', renderPropertyCard(prop));
     updatePropertyResult(prop, calcWAIncome(income, settings));
   });
 
@@ -917,14 +910,28 @@ function parseListingUrl(url: string): { address: string } {
 
 const STORAGE_KEY = 'hbc-state';
 
+let firestoreDebounce: ReturnType<typeof setTimeout> | null = null;
+
 function saveState() {
-  const state = {
+  const appState: AppState = { income, settings, properties, nextId };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    ...appState,
+    collapsedCards: [...collapsedCards],
+    collapsedSections: [...collapsedSections],
+  }));
+  if (currentUser) {
+    if (firestoreDebounce) clearTimeout(firestoreDebounce);
+    firestoreDebounce = setTimeout(() => saveToFirestore({ income, settings, properties, nextId }), 500);
+  }
+}
+
+// Persists only collapse state — no Firestore write needed since it's local UI only.
+function saveLocalState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({
     income, settings, properties, nextId,
     collapsedCards: [...collapsedCards],
     collapsedSections: [...collapsedSections],
-  };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  if (currentUser) saveToFirestore({ income, settings, properties, nextId });
+  }));
 }
 
 function loadState() {
