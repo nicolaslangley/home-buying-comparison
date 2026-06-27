@@ -460,6 +460,18 @@ function getApp() {
   return document.getElementById('app')!;
 }
 
+// Updates only the auth bar without a full re-render (avoids image flicker).
+function updateAuthBar() {
+  const bar = document.querySelector('.auth-bar');
+  if (!bar) return;
+  bar.innerHTML = currentUser
+    ? `<span class="auth-user">${currentUser.displayName}</span>
+       <button class="auth-btn" id="auth-signout">Sign out</button>`
+    : `<button class="auth-btn" id="auth-signin">Sign in with Google</button>`;
+  document.getElementById('auth-signin')?.addEventListener('click', () => signInWithGoogle());
+  document.getElementById('auth-signout')?.addEventListener('click', () => signOutUser());
+}
+
 function render() {
   const incomeCalcs = calcWAIncome(income, settings);
   const financesCollapsed = collapsedSections.has('finances');
@@ -952,7 +964,7 @@ onAuthChanged(async (user) => {
   if (unsubscribeFirestore) { unsubscribeFirestore(); unsubscribeFirestore = null; }
 
   currentUser = user;
-  render(); // update auth bar immediately
+  updateAuthBar();
 
   if (!user) return;
 
