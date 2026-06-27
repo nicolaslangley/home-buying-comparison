@@ -942,8 +942,6 @@ function loadState() {
 }
 
 function applyState(s: AppState) {
-  const current = { income, settings, properties, nextId };
-  if (JSON.stringify(s) === JSON.stringify(current)) return;
   Object.assign(income, s.income);
   Object.assign(settings, s.settings);
   properties = s.properties;

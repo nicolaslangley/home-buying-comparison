@@ -13,7 +13,6 @@ import {
   getDoc,
   setDoc,
   onSnapshot,
-  type DocumentSnapshot,
 } from 'firebase/firestore';
 import type { WAIncome, GlobalSettings, Property } from './types';
 
@@ -65,8 +64,17 @@ export function onAuthChanged(
   });
 }
 
+// Counts writes we initiated that haven't been echoed back yet.
+// Each saveToFirestore increments; the first non-pending snapshot decrements and skips.
+let pendingOwnSnapshots = 0;
+
 export async function saveToFirestore(state: AppState): Promise<void> {
-  await setDoc(householdDoc, state);
+  pendingOwnSnapshots++;
+  try {
+    await setDoc(householdDoc, state);
+  } catch {
+    pendingOwnSnapshots--;
+  }
 }
 
 export async function loadFromFirestore(): Promise<AppState | null> {
@@ -74,11 +82,10 @@ export async function loadFromFirestore(): Promise<AppState | null> {
   return snap.exists() ? (snap.data() as AppState) : null;
 }
 
-// Returns an unsubscribe function. Skips snapshots caused by our own writes
-// (hasPendingWrites = true) to avoid re-render loops.
+// Returns an unsubscribe function. Skips snapshots caused by our own writes.
 export function subscribeToFirestore(cb: (state: AppState) => void): () => void {
-  return onSnapshot(householdDoc, { includeMetadataChanges: true }, (snap: DocumentSnapshot) => {
-    if (snap.metadata.hasPendingWrites) return;
+  return onSnapshot(householdDoc, (snap) => {
+    if (pendingOwnSnapshots > 0) { pendingOwnSnapshots--; return; }
     if (snap.exists()) cb(snap.data() as AppState);
   });
 }
