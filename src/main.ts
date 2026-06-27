@@ -590,6 +590,7 @@ function attachListeners() {
       const card = document.querySelector(`[data-id="${id}"]`) as HTMLElement | null;
       if (card) card.classList.toggle('is-collapsed', collapsedCards.has(id));
       collapseCardBtn.textContent = collapsedCards.has(id) ? '▸' : '▾';
+      saveState();
       return;
     }
 
@@ -606,6 +607,7 @@ function attachListeners() {
         const card = document.querySelector(`[data-income-card="${key}"] .income-card-body`);
         card?.classList.toggle('is-collapsed', isNowCollapsed);
       }
+      saveState();
       return;
     }
 
@@ -898,9 +900,13 @@ function parseListingUrl(url: string): { address: string } {
 const STORAGE_KEY = 'hbc-state';
 
 function saveState() {
-  const state = { income, settings, properties, nextId };
+  const state = {
+    income, settings, properties, nextId,
+    collapsedCards: [...collapsedCards],
+    collapsedSections: [...collapsedSections],
+  };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  if (currentUser) saveToFirestore(state);
+  if (currentUser) saveToFirestore({ income, settings, properties, nextId });
 }
 
 function loadState() {
@@ -912,6 +918,8 @@ function loadState() {
     if (s.settings) Object.assign(settings, s.settings);
     if (Array.isArray(s.properties)) properties = s.properties;
     if (s.nextId) nextId = s.nextId;
+    if (Array.isArray(s.collapsedCards)) s.collapsedCards.forEach((id: string) => collapsedCards.add(id));
+    if (Array.isArray(s.collapsedSections)) s.collapsedSections.forEach((k: string) => collapsedSections.add(k));
   } catch { /* ignore corrupt data */ }
 }
 
