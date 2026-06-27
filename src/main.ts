@@ -582,11 +582,13 @@ function attachListeners() {
         Object.assign(income, pendingSharedFinances.income);
         Object.assign(settings, pendingSharedFinances.settings);
         saveState();
+        updateIncomeResults();
+        updateAllPropertyResults();
       }
       pendingSharedFinances = null;
       const prop = pendingShareProp;
       pendingShareProp = null;
-      render();
+      document.getElementById('finance-import-modal')?.remove();
       if (prop) {
         document.getElementById('add-prop-modal')!.classList.add('is-open');
         preFillModal(prop);
@@ -649,7 +651,7 @@ function attachListeners() {
       properties = properties.filter(p => p.id !== id);
       collapsedCards.delete(id);
       saveState();
-      render();
+      document.querySelector(`[data-id="${id}"]`)?.remove();
     }
   });
 
@@ -677,7 +679,11 @@ function attachListeners() {
     properties.push(prop);
     saveState();
     closeModal();
-    render();
+    const grid = document.getElementById('props')!;
+    const temp = document.createElement('div');
+    temp.innerHTML = renderPropertyCard(prop);
+    grid.appendChild(temp.firstElementChild!);
+    updatePropertyResult(prop, calcWAIncome(income, settings));
   });
 
   app.addEventListener('keydown', (e) => {
